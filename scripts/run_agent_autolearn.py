@@ -31,7 +31,14 @@ def run_autolearn(num_rounds: int) -> None:
     logging.basicConfig(level=logging.INFO)
 
     state_path = Path("agent_state.json")
-    loop_config = AgentLoopConfig()
+    # 使用一组更“积极”的学习配置：
+    # - 更高的不确定性估计（0.9），鼓励更多主动学习；
+    # - 更低的学习意愿阈值（0.05），降低触发门槛；
+    # 这样在完全自主场景下更容易看到能力与知识的积累。
+    loop_config = AgentLoopConfig(
+        learning_uncertainty=0.9,
+        learning_threshold=0.05,
+    )
 
     print(f"=== me-agent 自主学习循环（共 {num_rounds} 轮）===")  # noqa: T201
     print("状态将持久化到 agent_state.json，可用 scripts/show_agent_status.py 查看。\n")  # noqa: T201
@@ -104,4 +111,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
