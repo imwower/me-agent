@@ -19,6 +19,7 @@ from me_core.types import MultiModalInput
 
 from .audio_encoder_stub import AudioEncoderStub  # noqa: F401
 from .image_encoder_stub import ImageEncoderStub  # noqa: F401
+from .processor import encode_to_event  # noqa: F401
 from .text_encoder_stub import TextEncoderStub  # noqa: F401
 from .video_encoder_stub import VideoEncoderStub  # noqa: F401
 
@@ -30,6 +31,7 @@ __all__ = [
     "AudioEncoderStub",
     "VideoEncoderStub",
     "encode_multimodal",
+    "encode_to_event",
 ]
 
 
@@ -63,4 +65,3 @@ def encode_multimodal(input_data: MultiModalInput) -> Dict[str, List[float]]:
 
     logger.info("多模态编码结果: %s", results)
     return results
-

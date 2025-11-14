@@ -7,6 +7,7 @@ from me_core.perception import (
     TextEncoderStub,
     VideoEncoderStub,
     encode_multimodal,
+    encode_to_event,
 )
 from me_core.types import MultiModalInput
 
@@ -92,7 +93,25 @@ class MultiModalEncodeTestCase(unittest.TestCase):
                 # 向量元素应为 float
                 self.assertTrue(all(isinstance(x, float) for x in vec))
 
+    def test_encode_to_event_wraps_multimodal(self) -> None:
+        """encode_to_event 应将多模态向量封装为 AgentEvent。"""
+
+        m = MultiModalInput(
+            text="你好，多模态世界",
+            image_meta={"filename": "test.png"},
+        )
+
+        event = encode_to_event(m, source="test_case")
+
+        self.assertEqual(event.event_type, "perception")
+        self.assertIsNotNone(event.payload)
+        payload = event.payload or {}
+        self.assertEqual(payload.get("kind"), "perception")
+        self.assertEqual(payload.get("source"), "test_case")
+        self.assertIn("embeddings", payload)
+        self.assertIn("raw", payload)
+        self.assertIn("text", payload["raw"])
+
 
 if __name__ == "__main__":
     unittest.main()
-

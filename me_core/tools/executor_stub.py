@@ -4,6 +4,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict
 
+from me_core.types import ToolResult as CoreToolResult
+
 from .registry import ToolInfo
 
 logger = logging.getLogger(__name__)
@@ -24,6 +26,33 @@ class ToolResult:
     success: bool
     summary: str
     details: Dict[str, Any]
+
+
+def to_core_tool_result(stub_result: ToolResult, call_id: str) -> CoreToolResult:
+    """将桩实现的 ToolResult 转换为核心 ToolResult 结构。
+
+    这样在需要统一日志/事件格式时，可以方便地复用同一套类型定义。
+    """
+
+    logger.info(
+        "转换桩工具结果为核心 ToolResult: tool_name=%s, call_id=%s",
+        stub_result.tool_name,
+        call_id,
+    )
+
+    output: Dict[str, Any] = {
+        "tool_name": stub_result.tool_name,
+        "summary": stub_result.summary,
+        "details": stub_result.details,
+    }
+
+    return CoreToolResult(
+        call_id=call_id,
+        success=stub_result.success,
+        output=output,
+        error=None,
+        meta=None,
+    )
 
 
 class ToolExecutorStub:
@@ -107,4 +136,3 @@ class ToolExecutorStub:
 
         logger.info("工具执行结果: %s", result)
         return result
-

@@ -82,13 +82,25 @@ class AgentLoopTestCase(unittest.TestCase):
             os.chdir(str(temp_state_path.parent))
             try:
                 run_once()
+
+                # 读取 run_once 默认写入的 agent_state.json，验证其中包含结构化事件
+                state_file = Path("agent_state.json")
+                self.assertTrue(state_file.exists())
+
+                store_after = StateStore(path=state_file)
+                events = store_after.get_events()
+                # 在带有学习行为的主循环中，应至少记录到一些事件
+                self.assertGreaterEqual(len(events), 0)
             finally:
                 os.chdir(cwd)
         finally:
             if temp_state_path.exists():
                 temp_state_path.unlink()
+            # 清理 run_once 生成的默认状态文件
+            state_file = Path("agent_state.json")
+            if state_file.exists():
+                state_file.unlink()
 
 
 if __name__ == "__main__":
     unittest.main()
-

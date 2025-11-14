@@ -2,14 +2,49 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List
 
 from me_core.drives.drive_vector import DriveVector
 from me_core.self_model.self_state import SelfState
+from me_core.types import AgentEvent
 
 logger = logging.getLogger(__name__)
+
+
+def _event_to_dict(event: AgentEvent) -> Dict[str, Any]:
+    """将 AgentEvent 序列化为 JSON 友好的字典结构。"""
+
+    return {
+        "timestamp": event.timestamp.isoformat(),
+        "event_type": event.event_type,
+        "payload": event.payload,
+    }
+
+
+def _event_from_dict(data: Dict[str, Any]) -> AgentEvent:
+    """从字典反序列化为 AgentEvent。
+
+    为了兼容旧数据或异常数据，这里做了较为宽松的处理：
+        - 若时间解析失败，则使用“当前时间”兜底；
+        - 若缺失 event_type，则使用 "unknown"。
+    """
+
+    ts_raw = data.get("timestamp")
+    if isinstance(ts_raw, str):
+        try:
+            timestamp = datetime.fromisoformat(ts_raw)
+        except ValueError:
+            timestamp = datetime.now(timezone.utc)
+    else:
+        timestamp = datetime.now(timezone.utc)
+
+    event_type = str(data.get("event_type") or "unknown")
+    payload = data.get("payload")
+
+    return AgentEvent(timestamp=timestamp, event_type=event_type, payload=payload)
 
 
 @dataclass
@@ -20,12 +55,14 @@ class StateStore:
         - SelfState：自我模型状态
         - DriveVector：内在驱动力
         - event_summaries：少量历史事件的文本摘要（仅用于简单回顾）
+        - events：最近若干条结构化 AgentEvent（用于统计与自我更新）
     """
 
     path: Path = field(default_factory=lambda: Path("agent_state.json"))
     self_state: SelfState = field(default_factory=SelfState)
     drives: DriveVector = field(default_factory=DriveVector)
     event_summaries: List[str] = field(default_factory=list)
+    events: List[AgentEvent] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         """初始化时尝试从磁盘加载已有状态。"""
@@ -51,10 +88,21 @@ class StateStore:
         self_state_data = data.get("self_state") or {}
         drives_data = data.get("drives") or {}
         events = data.get("event_summaries") or []
+        raw_events = data.get("events") or []
 
         self.self_state = SelfState.from_dict(self_state_data)
         self.drives = DriveVector.from_dict(drives_data)
         self.event_summaries = list(events)
+
+        # 将历史事件从字典恢复为 AgentEvent，忽略异常项
+        restored_events: List[AgentEvent] = []
+        for item in raw_events:
+            if isinstance(item, dict):
+                try:
+                    restored_events.append(_event_from_dict(item))
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("反序列化事件失败，将跳过该条记录: %s", exc)
+        self.events = restored_events
 
     def save_state(self) -> None:
         """将当前状态保存到 JSON 文件。"""
@@ -63,6 +111,7 @@ class StateStore:
             "self_state": self.self_state.to_dict(),
             "drives": self.drives.as_dict(),
             "event_summaries": list(self.event_summaries),
+            "events": [_event_to_dict(e) for e in self.events],
         }
 
         try:
@@ -105,3 +154,28 @@ class StateStore:
             overflow = len(self.event_summaries) - max_len
             del self.event_summaries[0:overflow]
 
+    def append_events(self, new_events: List[AgentEvent], max_len: int = 100) -> None:
+        """追加结构化事件，并限制总条数。
+
+        这为后续的统计与聚合（例如 aggregate_stats）提供原始数据来源。
+        """
+
+        if not new_events:
+            return
+
+        logger.info("追加 %d 条事件到状态存储。", len(new_events))
+        self.events.extend(new_events)
+        if len(self.events) > max_len:
+            overflow = len(self.events) - max_len
+            del self.events[0:overflow]
+
+    def get_events(self, limit: int | None = None) -> List[AgentEvent]:
+        """获取最近若干条事件。
+
+        参数：
+            limit: 若为 None，则返回全部事件；否则返回最近 limit 条。
+        """
+
+        if limit is None or limit >= len(self.events):
+            return list(self.events)
+        return self.events[-limit:]

@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from me_core.dialogue import DialoguePlanner, InitiativeDecision, generate_message
+from me_core.drives.drive_update import implicit_adjust
 from me_core.learning.learning_manager import LearningManager
 from me_core.self_model.self_summarizer import summarize_self
+from me_core.self_model.self_updater import aggregate_stats, update_from_event
 from me_core.tools.registry import ToolInfo, ToolRegistry
+from me_core.types import AgentEvent
 
 from .state_store import StateStore
 
@@ -54,7 +57,8 @@ def run_once(
         4. 使用 DialoguePlanner 决定是否主动说话；
         5. 若需要说话，则用 generate_message 生成中文输出；
         6. 同时调用 LearningManager.maybe_learn 模拟一次学习过程；
-        7. 将状态写回 StateStore。
+        7. 根据学习结果构造 AgentEvent，更新 SelfState 与 Drives；
+        8. 将状态写回 StateStore。
     """
 
     store = StateStore()
@@ -103,10 +107,56 @@ def run_once(
         store.add_event_summary(
             f"learn: 调用工具 {len(learning_results)} 次，成功 {sum(1 for r in learning_results if r.success)} 次"
         )
+
+        # 将学习结果映射为标准的 AgentEvent，并驱动自我模型更新
+        tool_events: List[AgentEvent] = []
+        success_count = 0
+        for result in learning_results:
+            if result.success:
+                success_count += 1
+
+            payload: Dict[str, object] = {
+                "kind": "task",
+                "task_type": result.tool_name,
+                "success": result.success,
+                "topic": context.get("topic"),
+            }
+            # 预留错误信息字段，方便未来真实工具失败时记录局限
+            if not result.success:
+                details = getattr(result, "details", None)
+                if isinstance(details, dict) and details.get("message"):
+                    payload["error"] = str(details["message"])
+
+            event = AgentEvent.now(event_type="task", payload=payload)
+            tool_events.append(event)
+            self_state = update_from_event(self_state, event)
+
+        logger.info(
+            "根据学习结果生成任务事件并更新自我状态: events=%s",
+            tool_events,
+        )
+
+        # 将新事件加入状态存储，并基于历史事件重新聚合能力与局限
+        store.append_events(tool_events)
+        history = store.get_events(limit=100)
+        self_state = aggregate_stats(self_state, history)
+        logger.info("基于最近 %d 条事件聚合后的自我状态: %s", len(history), self_state)
+
+        # 使用学习成功率作为驱动力隐式调整的输入
+        success_ratio = success_count / len(learning_results)
+        drives = implicit_adjust(
+            drives,
+            {"learning_success": success_ratio},
+        )
+        logger.info(
+            "根据学习成功率隐式调整驱动力: success_ratio=%.3f, drives=%s",
+            success_ratio,
+            drives,
+        )
     else:
         store.add_event_summary("learn: skipped")
 
-    # 将状态写回存储（当前逻辑中 self_state / drives 未改变，但为未来扩展留接口）
+    # 将状态写回存储
     store.set_self_state(self_state)
     store.set_drives(drives)
     store.save_state()
