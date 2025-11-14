@@ -171,8 +171,9 @@ class SelfSummarizerTestCase(unittest.TestCase):
         self.assertIn("AI 助手", summary["who_am_i"])
         self.assertIn("summarize", summary["what_can_i_do"])
         self.assertIn("需要更多真实使用场景的反馈", summary["what_do_i_need"])
+        # 最近活动也应体现在“我能做什么”的描述中
+        self.assertIn("完成了一次自我总结", summary["what_can_i_do"])
 
 
 if __name__ == "__main__":
     unittest.main()
-

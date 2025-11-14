@@ -193,7 +193,35 @@ class DriveUpdateTestCase(unittest.TestCase):
         self.assertLess(current.exploration_level, first.exploration_level)
         self.assertGreater(current.exploration_level, 0.3)
 
+    def test_implicit_adjust_reduce_chat_on_low_response(self) -> None:
+        """当用户几乎不回应时，应逐步降低话痨度与社交需求。"""
+
+        drives = DriveVector(
+            chat_level=0.8,
+            curiosity_level=0.5,
+            exploration_level=0.5,
+            learning_intensity=0.5,
+            social_need=0.8,
+            data_need=0.5,
+        )
+
+        feedback = {"user_response_ratio": 0.0}
+
+        first = implicit_adjust(drives, feedback)
+        # 第一次调用应略微降低聊天与社交相关驱动
+        self.assertLess(first.chat_level, drives.chat_level)
+        self.assertLess(first.social_need, drives.social_need)
+
+        # 多次迭代后，话痨度与社交需求应继续降低，但不会瞬间跌到 0
+        current = first
+        for _ in range(10):
+            current = implicit_adjust(current, feedback)
+
+        self.assertLess(current.chat_level, first.chat_level)
+        self.assertLess(current.social_need, first.social_need)
+        self.assertGreater(current.chat_level, 0.1)
+        self.assertGreater(current.social_need, 0.1)
+
 
 if __name__ == "__main__":
     unittest.main()
-

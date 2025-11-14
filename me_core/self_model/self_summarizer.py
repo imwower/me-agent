@@ -43,6 +43,23 @@ def _format_needs(needs: List[str]) -> str:
     return "；".join(needs)
 
 
+def _format_recent_activities(activities: List[str]) -> str:
+    """将最近活动列表转为简短可读的中文描述。
+
+    只展示最新的若干条，避免自我总结过长。
+    """
+
+    if not activities:
+        return ""
+
+    # 仅展示最近 3 条活动，从旧到新排列，让读者看到“最近在做什么”
+    recent = activities[-3:]
+    text = "；".join(recent)
+    result = f"最近我做过的一些事情包括：{text}。"
+    logger.info("格式化最近活动: %s -> %s", recent, result)
+    return result
+
+
 def summarize_self(state: SelfState) -> Dict[str, str]:
     """根据 SelfState 生成一段简短的自我总结。
 
@@ -57,9 +74,14 @@ def summarize_self(state: SelfState) -> Dict[str, str]:
     who_am_i = f"我是 {state.identity}。"
 
     capability_text = _format_capabilities(state.capabilities)
+    # 将关注主题与最近活动也融入“我能做什么”的描述，形成更具时间感的自述
     if state.focus_topics:
         topics = "、".join(state.focus_topics[:5])
         capability_text += f"；最近我特别关注的方向包括：{topics}。"
+
+    recent_text = _format_recent_activities(state.recent_activities)
+    if recent_text:
+        capability_text += f" {recent_text}"
 
     needs_text = _format_needs(state.needs)
     if state.limitations:
@@ -75,4 +97,3 @@ def summarize_self(state: SelfState) -> Dict[str, str]:
 
     logger.info("自我总结结果: %s", summary)
     return summary
-

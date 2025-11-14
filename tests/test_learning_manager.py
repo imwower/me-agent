@@ -85,7 +85,39 @@ class LearningManagerTestCase(unittest.TestCase):
         self.assertEqual(len(results), 0)
         self.assertEqual(len(manager.knowledge_base), before_size)
 
+    def test_fallback_to_all_tools_when_no_topic_match(self) -> None:
+        """当主题与任何工具关键词都不匹配时，应退回到使用全部工具。"""
+
+        registry = ToolRegistry()
+        # 构造一个只对特定关键词敏感的工具，并使用与之完全无关的 topic
+        registry.register_tool(
+            ToolInfo(
+                name="generic_tool",
+                type="knowledge",
+                cost=0.2,
+                description="通用学习工具（用于测试回退逻辑）。",
+                good_for=["完全不同的关键词"],
+            )
+        )
+
+        manager = LearningManager(registry=registry)
+
+        drives = DriveVector(
+            chat_level=0.5,
+            curiosity_level=0.9,
+            exploration_level=0.9,
+            learning_intensity=0.9,
+            social_need=0.4,
+            data_need=0.9,
+        )
+        uncertainty = 0.9
+
+        context = {"topic": "与工具关键词完全不匹配的主题"}
+        results = manager.maybe_learn(uncertainty, drives, context)
+
+        # 尽管 topic 与 good_for 不匹配，也应通过“回退为全部工具”机制触发至少一次调用
+        self.assertGreaterEqual(len(results), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
-

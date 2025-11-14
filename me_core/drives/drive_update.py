@@ -92,7 +92,7 @@ def implicit_adjust(drives: DriveVector, feedback: Dict[str, Any]) -> DriveVecto
 
     logger.info("隐式调整前的驱动力: %s, 反馈: %s", drives, feedback)
 
-    # 处理用户响应比例：用户回复越积极，越鼓励聊天与社交
+    # 处理用户响应比例：根据用户回复情况，逐步提升或降低聊天/社交倾向
     if isinstance(user_response_ratio_raw, (int, float)):
         user_response_ratio = float(user_response_ratio_raw)
         # 将反馈裁剪在 [0,1] 内，避免异常值
@@ -101,9 +101,35 @@ def implicit_adjust(drives: DriveVector, feedback: Dict[str, Any]) -> DriveVecto
         elif user_response_ratio > 1.0:
             user_response_ratio = 1.0
 
-        # 目标值倾向于不低于当前值：高响应会把目标往上拉
-        target_chat = max(new_drives.chat_level, user_response_ratio)
-        target_social = max(new_drives.social_need, user_response_ratio)
+        # 为了避免“只升不降”的单向偏移，这里根据不同区间采用不同策略：
+        # - 高响应（>=0.6）：鼓励多说话，目标向 user_response_ratio 靠近；
+        # - 低响应（<=0.3）：说明用户并不买账，适当降低话痨度和社交需求；
+        # - 中等响应：维持在一个相对中性的水平（0.5），避免极端。
+        if user_response_ratio >= 0.6:
+            target_chat = max(new_drives.chat_level, user_response_ratio)
+            target_social = max(new_drives.social_need, user_response_ratio)
+            logger.info(
+                "用户响应较高，适度提升聊天/社交倾向: ratio=%.3f, target_chat=%.3f, target_social=%.3f",
+                user_response_ratio,
+                target_chat,
+                target_social,
+            )
+        elif user_response_ratio <= 0.3:
+            target_chat = min(new_drives.chat_level, user_response_ratio)
+            target_social = min(new_drives.social_need, user_response_ratio)
+            logger.info(
+                "用户响应较低，适度降低聊天/社交倾向: ratio=%.3f, target_chat=%.3f, target_social=%.3f",
+                user_response_ratio,
+                target_chat,
+                target_social,
+            )
+        else:
+            target_chat = 0.5
+            target_social = 0.5
+            logger.info(
+                "用户响应中等，将聊天/社交倾向缓慢拉回中性水平: ratio=%.3f",
+                user_response_ratio,
+            )
 
         # 使用平滑更新公式：new = old * 0.9 + target * 0.1
         new_drives.chat_level = (
@@ -113,7 +139,7 @@ def implicit_adjust(drives: DriveVector, feedback: Dict[str, Any]) -> DriveVecto
             new_drives.social_need * 0.9 + target_social * 0.1
         )
 
-    # 处理学习成功率：若探索欲很高但完全没有成功，则轻微压低探索欲
+    # 处理学习成功率：根据近期“试验”的成败，略微调节探索/学习倾向
     if isinstance(learning_success_raw, (int, float)):
         learning_success = float(learning_success_raw)
         if learning_success < 0.0:
@@ -122,7 +148,7 @@ def implicit_adjust(drives: DriveVector, feedback: Dict[str, Any]) -> DriveVecto
             learning_success = 1.0
 
         if learning_success == 0.0 and new_drives.exploration_level > 0.6:
-            # 目标探索值略低于当前值，避免一次性大幅削弱
+            # 近期尝试全部失败且探索值偏高：略微降低探索欲与学习强度
             target_exploration = max(
                 0.0, new_drives.exploration_level - 0.2
             )
@@ -131,8 +157,34 @@ def implicit_adjust(drives: DriveVector, feedback: Dict[str, Any]) -> DriveVecto
                 + target_exploration * 0.1
             )
 
+            target_intensity = max(
+                0.0, new_drives.learning_intensity - 0.2
+            )
+            new_drives.learning_intensity = (
+                new_drives.learning_intensity * 0.9
+                + target_intensity * 0.1
+            )
+            logger.info(
+                "近期学习完全失败，轻微压低探索欲和学习强度: exploration=%.3f, learning_intensity=%.3f",
+                new_drives.exploration_level,
+                new_drives.learning_intensity,
+            )
+        elif learning_success >= 0.7:
+            # 若近期学习成功率较高，则在不过度冒进的前提下，小幅提升学习强度
+            target_intensity = min(
+                1.0, new_drives.learning_intensity + 0.2
+            )
+            new_drives.learning_intensity = (
+                new_drives.learning_intensity * 0.9
+                + target_intensity * 0.1
+            )
+            logger.info(
+                "近期学习较成功，适度提升学习强度: learning_success=%.3f, learning_intensity=%.3f",
+                learning_success,
+                new_drives.learning_intensity,
+            )
+
     new_drives.clamp()
 
     logger.info("隐式调整后的驱动力: %s", new_drives)
     return new_drives
-
