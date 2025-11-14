@@ -8,6 +8,8 @@ from me_core.drives.drive_vector import DriveVector
 from me_core.tools.executor_stub import ToolExecutorStub, ToolResult
 from me_core.tools.registry import ToolInfo, ToolRegistry
 
+from .config import DEFAULT_LEARNING_CONFIG
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,7 +26,7 @@ class LearningManager:
     registry: ToolRegistry
     knowledge_base: List[Dict[str, Any]] = field(default_factory=list)
     executor: ToolExecutorStub = field(default_factory=ToolExecutorStub)
-    max_knowledge_entries: int = 200
+    max_knowledge_entries: int = DEFAULT_LEARNING_CONFIG.max_knowledge_entries
 
     def compute_learning_desire(
         self,
@@ -181,7 +183,7 @@ class LearningManager:
         uncertainty: float,
         drives: DriveVector,
         context: Dict[str, Any],
-        threshold: float = 0.2,
+        threshold: float = DEFAULT_LEARNING_CONFIG.desire_threshold,
     ) -> List[ToolResult]:
         """在学习意愿足够高时主动调用工具“学习”。
 

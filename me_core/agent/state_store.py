@@ -56,6 +56,7 @@ class StateStore:
         - DriveVector：内在驱动力
         - event_summaries：少量历史事件的文本摘要（仅用于简单回顾）
         - events：最近若干条结构化 AgentEvent（用于统计与自我更新）
+        - knowledge_base：学习模块内部维护的简单知识条目列表
     """
 
     path: Path = field(default_factory=lambda: Path("agent_state.json"))
@@ -63,6 +64,7 @@ class StateStore:
     drives: DriveVector = field(default_factory=DriveVector)
     event_summaries: List[str] = field(default_factory=list)
     events: List[AgentEvent] = field(default_factory=list)
+    knowledge_base: List[Dict[str, Any]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         """初始化时尝试从磁盘加载已有状态。"""
@@ -89,6 +91,7 @@ class StateStore:
         drives_data = data.get("drives") or {}
         events = data.get("event_summaries") or []
         raw_events = data.get("events") or []
+        kb = data.get("knowledge_base") or []
 
         self.self_state = SelfState.from_dict(self_state_data)
         self.drives = DriveVector.from_dict(drives_data)
@@ -103,6 +106,11 @@ class StateStore:
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("反序列化事件失败，将跳过该条记录: %s", exc)
         self.events = restored_events
+        # 知识库直接以列表形式保存/恢复，具体结构由 LearningManager 约定
+        if isinstance(kb, list):
+            self.knowledge_base = list(kb)
+        else:
+            self.knowledge_base = []
 
     def save_state(self) -> None:
         """将当前状态保存到 JSON 文件。"""
@@ -112,6 +120,7 @@ class StateStore:
             "drives": self.drives.as_dict(),
             "event_summaries": list(self.event_summaries),
             "events": [_event_to_dict(e) for e in self.events],
+            "knowledge_base": list(self.knowledge_base),
         }
 
         try:
@@ -153,6 +162,17 @@ class StateStore:
         if len(self.event_summaries) > max_len:
             overflow = len(self.event_summaries) - max_len
             del self.event_summaries[0:overflow]
+
+    def set_knowledge_base(self, knowledge_base: List[Dict[str, Any]]) -> None:
+        """设置当前的知识库内容。"""
+
+        logger.info("更新知识库，当前条目数: %d", len(knowledge_base))
+        self.knowledge_base = list(knowledge_base)
+
+    def get_knowledge_base(self) -> List[Dict[str, Any]]:
+        """获取当前知识库内容。"""
+
+        return list(self.knowledge_base)
 
     def append_events(self, new_events: List[AgentEvent], max_len: int = 100) -> None:
         """追加结构化事件，并限制总条数。

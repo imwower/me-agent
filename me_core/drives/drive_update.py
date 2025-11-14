@@ -4,9 +4,13 @@ import logging
 from dataclasses import replace
 from typing import Any, Dict
 
+from .config import DEFAULT_DRIVES_CONFIG
 from .drive_vector import DriveVector
 
 logger = logging.getLogger(__name__)
+
+# 为了后续调参方便，这里统一通过配置对象读取相关超参数
+CONFIG = DEFAULT_DRIVES_CONFIG
 
 
 def _increment(value: float, delta: float) -> float:
@@ -34,7 +38,7 @@ def apply_user_command(drives: DriveVector, command: str) -> DriveVector:
     normalized = command.strip()
     new_drives = replace(drives)  # 创建一个浅拷贝，避免直接修改原对象
 
-    step = 0.2
+    step = CONFIG.user_command_step
 
     logger.info("应用用户指令前的驱动力: %s, 指令: %s", drives, normalized)
 
@@ -105,7 +109,7 @@ def implicit_adjust(drives: DriveVector, feedback: Dict[str, Any]) -> DriveVecto
         # - 高响应（>=0.6）：鼓励多说话，目标向 user_response_ratio 靠近；
         # - 低响应（<=0.3）：说明用户并不买账，适当降低话痨度和社交需求；
         # - 中等响应：维持在一个相对中性的水平（0.5），避免极端。
-        if user_response_ratio >= 0.6:
+        if user_response_ratio >= CONFIG.high_response_threshold:
             target_chat = max(new_drives.chat_level, user_response_ratio)
             target_social = max(new_drives.social_need, user_response_ratio)
             logger.info(
@@ -114,7 +118,7 @@ def implicit_adjust(drives: DriveVector, feedback: Dict[str, Any]) -> DriveVecto
                 target_chat,
                 target_social,
             )
-        elif user_response_ratio <= 0.3:
+        elif user_response_ratio <= CONFIG.low_response_threshold:
             target_chat = min(new_drives.chat_level, user_response_ratio)
             target_social = min(new_drives.social_need, user_response_ratio)
             logger.info(
@@ -131,12 +135,13 @@ def implicit_adjust(drives: DriveVector, feedback: Dict[str, Any]) -> DriveVecto
                 user_response_ratio,
             )
 
-        # 使用平滑更新公式：new = old * 0.9 + target * 0.1
+        # 使用平滑更新公式：new = old * (1 - alpha) + target * alpha
+        alpha = CONFIG.implicit_smooth_alpha
         new_drives.chat_level = (
-            new_drives.chat_level * 0.9 + target_chat * 0.1
+            new_drives.chat_level * (1.0 - alpha) + target_chat * alpha
         )
         new_drives.social_need = (
-            new_drives.social_need * 0.9 + target_social * 0.1
+            new_drives.social_need * (1.0 - alpha) + target_social * alpha
         )
 
     # 处理学习成功率：根据近期“试验”的成败，略微调节探索/学习倾向
@@ -147,36 +152,39 @@ def implicit_adjust(drives: DriveVector, feedback: Dict[str, Any]) -> DriveVecto
         elif learning_success > 1.0:
             learning_success = 1.0
 
-        if learning_success == 0.0 and new_drives.exploration_level > 0.6:
+        if learning_success == 0.0 and new_drives.exploration_level > CONFIG.exploration_high_threshold:
             # 近期尝试全部失败且探索值偏高：略微降低探索欲与学习强度
             target_exploration = max(
-                0.0, new_drives.exploration_level - 0.2
+                0.0, new_drives.exploration_level - CONFIG.learning_adjust_step
             )
+            alpha = CONFIG.implicit_smooth_alpha
             new_drives.exploration_level = (
-                new_drives.exploration_level * 0.9
-                + target_exploration * 0.1
+                new_drives.exploration_level * (1.0 - alpha)
+                + target_exploration * alpha
             )
 
             target_intensity = max(
-                0.0, new_drives.learning_intensity - 0.2
+                0.0, new_drives.learning_intensity - CONFIG.learning_adjust_step
             )
+            alpha = CONFIG.implicit_smooth_alpha
             new_drives.learning_intensity = (
-                new_drives.learning_intensity * 0.9
-                + target_intensity * 0.1
+                new_drives.learning_intensity * (1.0 - alpha)
+                + target_intensity * alpha
             )
             logger.info(
                 "近期学习完全失败，轻微压低探索欲和学习强度: exploration=%.3f, learning_intensity=%.3f",
                 new_drives.exploration_level,
                 new_drives.learning_intensity,
             )
-        elif learning_success >= 0.7:
+        elif learning_success >= CONFIG.learning_success_high_threshold:
             # 若近期学习成功率较高，则在不过度冒进的前提下，小幅提升学习强度
             target_intensity = min(
-                1.0, new_drives.learning_intensity + 0.2
+                1.0, new_drives.learning_intensity + CONFIG.learning_adjust_step
             )
+            alpha = CONFIG.implicit_smooth_alpha
             new_drives.learning_intensity = (
-                new_drives.learning_intensity * 0.9
-                + target_intensity * 0.1
+                new_drives.learning_intensity * (1.0 - alpha)
+                + target_intensity * alpha
             )
             logger.info(
                 "近期学习较成功，适度提升学习强度: learning_success=%.3f, learning_intensity=%.3f",

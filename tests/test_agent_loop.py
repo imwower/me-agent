@@ -91,6 +91,9 @@ class AgentLoopTestCase(unittest.TestCase):
                 events = store_after.get_events()
                 # 在带有学习行为的主循环中，应至少记录到一些事件
                 self.assertGreaterEqual(len(events), 0)
+                # 知识库也应已持久化（即使可能为空列表，也需字段存在）
+                kb = store_after.get_knowledge_base()
+                self.assertIsInstance(kb, list)
             finally:
                 os.chdir(cwd)
         finally:

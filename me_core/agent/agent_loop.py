@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Tuple
 
 from me_core.dialogue import DialoguePlanner, InitiativeDecision, generate_message
 from me_core.drives.drive_update import implicit_adjust
+from me_core.learning.config import DEFAULT_LEARNING_CONFIG
 from me_core.learning.learning_manager import LearningManager
 from me_core.perception import encode_to_event
 from me_core.self_model.self_summarizer import summarize_self
@@ -30,6 +31,7 @@ class AgentLoopConfig:
 
     learning_uncertainty: float = 0.6
     history_window: int = 100
+    learning_threshold: float = DEFAULT_LEARNING_CONFIG.desire_threshold
 
 
 DEFAULT_AGENT_LOOP_CONFIG = AgentLoopConfig()
@@ -107,12 +109,16 @@ def run_once(
 
     # 模拟一次学习过程：不确定性简单设为 0.6
     registry = _build_default_tool_registry()
-    learning_manager = LearningManager(registry=registry)
+    # 使用状态存储中已有的知识库初始化学习管理器，实现跨轮持久化
+    learning_manager = LearningManager(
+        registry=registry, knowledge_base=store.get_knowledge_base()
+    )
 
     learning_results = learning_manager.maybe_learn(
         uncertainty=config.learning_uncertainty,
         drives=drives,
         context=context,
+        threshold=config.learning_threshold,
     )
 
     if learning_results:
@@ -199,6 +205,7 @@ def run_once(
     # 将状态写回存储
     store.set_self_state(self_state)
     store.set_drives(drives)
+    store.set_knowledge_base(learning_manager.knowledge_base)
     store.save_state()
 
     logger.info("本轮 agent 主循环结束。")
