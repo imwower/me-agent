@@ -17,7 +17,14 @@
 from __future__ import annotations
 
 import logging
+import sys
 from pathlib import Path
+
+# 确保可以从仓库根目录直接运行本脚本：
+# python scripts/run_agent_demo.py
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from me_core.agent.agent_loop import run_once
 from me_core.agent.state_store import StateStore
@@ -113,4 +120,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
