@@ -152,7 +152,10 @@ class SelfSummarizerTestCase(unittest.TestCase):
             },
             focus_topics=["自我模型", "驱动力"],
             limitations=["对最新现实世界信息不够了解"],
-            recent_activities=["完成了一次自我总结"],
+            recent_activities=[
+                "完成了一次自我总结",
+                "感知到新的输入片段：用户刚刚提供了一段测试文本",
+            ],
             needs=["需要更多真实使用场景的反馈"],
         )
 
@@ -173,6 +176,8 @@ class SelfSummarizerTestCase(unittest.TestCase):
         self.assertIn("需要更多真实使用场景的反馈", summary["what_do_i_need"])
         # 最近活动也应体现在“我能做什么”的描述中
         self.assertIn("完成了一次自我总结", summary["what_can_i_do"])
+        # 最近的感知片段也应该被提及
+        self.assertIn("用户刚刚提供了一段测试文本", summary["what_can_i_do"])
 
 
 if __name__ == "__main__":

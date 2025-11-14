@@ -79,6 +79,23 @@ def update_from_event(state: SelfState, event: AgentEvent) -> SelfState:
                     new_state.limitations.append(error_msg)
             new_state.add_activity(f"任务失败: {task_type}")
 
+    # 感知事件：记录最近感知到的信息，便于自我总结中体现“最近在看什么”
+    if kind == "perception":
+        text_snippet = ""
+        raw = payload.get("raw") if isinstance(payload, dict) else None
+        if isinstance(raw, dict):
+            text_value = raw.get("text")
+            if isinstance(text_value, str) and text_value:
+                # 只截取前若干字符，避免活动描述过长
+                text_snippet = text_value[:30]
+
+        if text_snippet:
+            activity_desc = f"感知到新的输入片段：{text_snippet}"
+        else:
+            activity_desc = "感知到新的多模态输入"
+
+        new_state.add_activity(activity_desc)
+
     # 独立的错误事件，也会推动自我局限的更新
     if event.event_type == "error":
         desc = error_msg or payload.get("message")
@@ -158,4 +175,3 @@ def aggregate_stats(state: SelfState, history: List[AgentEvent]) -> SelfState:
 
     logger.info("聚合历史后的自我状态: %s", new_state)
     return new_state
-

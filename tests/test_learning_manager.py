@@ -118,6 +118,30 @@ class LearningManagerTestCase(unittest.TestCase):
         # 尽管 topic 与 good_for 不匹配，也应通过“回退为全部工具”机制触发至少一次调用
         self.assertGreaterEqual(len(results), 1)
 
+    def test_query_knowledge_and_max_entries(self) -> None:
+        """query_knowledge 应按主题返回最近记录，并对知识库长度进行控制。"""
+
+        registry = self._build_registry_with_search()
+        manager = LearningManager(registry=registry, max_knowledge_entries=5)
+
+        # 手动追加多条学习记录，部分主题相关，部分无关
+        for i in range(10):
+            entry = {
+                "tool_name": "search_papers",
+                "topic": f"topic-{i}",
+                "summary": f"关于 topic-{i} 的学习记录",
+                "details": {},
+            }
+            manager.add_knowledge_entry(entry)
+
+        # 知识库长度应被截断到 max_knowledge_entries
+        self.assertLessEqual(len(manager.knowledge_base), 5)
+
+        # 查询一个在最近几条中出现的主题，应有命中
+        results = manager.query_knowledge("topic-9", max_results=3)
+        self.assertGreaterEqual(len(results), 1)
+        self.assertTrue(any("topic-9" in r["topic"] for r in results))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -51,6 +51,8 @@ class DialoguePlanner:
         topic = context.get("topic")
         topic_str = str(topic) if topic is not None else None
 
+        has_recent_learning = bool(context.get("has_recent_learning"))
+
         logger.info(
             "对话决策输入: speak_score=%.3f, data_need=%.3f, topic=%r, needs=%r",
             speak_score,
@@ -79,6 +81,18 @@ class DialoguePlanner:
             logger.info("对话决策结果: %s", decision)
             return decision
 
+        # 若最近刚有学习行为，且探索欲/好奇心较强，则优先分享学习收获
+        if has_recent_learning and (
+            drives.curiosity_level >= 0.6 or drives.exploration_level >= 0.6
+        ):
+            decision = InitiativeDecision(
+                should_speak=True,
+                intent="share_learning",
+                topic=topic_str,
+            )
+            logger.info("对话决策结果: %s", decision)
+            return decision
+
         # 默认进行一次简短的自我介绍/自述
         decision = InitiativeDecision(
             should_speak=True,
@@ -87,4 +101,3 @@ class DialoguePlanner:
         )
         logger.info("对话决策结果: %s", decision)
         return decision
-

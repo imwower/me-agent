@@ -60,6 +60,34 @@ def _format_recent_activities(activities: List[str]) -> str:
     return result
 
 
+def _format_recent_perceptions(activities: List[str]) -> str:
+    """从最近活动中提取感知相关的信息，生成专门的描述。
+
+    约定：
+        - 感知事件由 self_updater 使用前缀 "感知到新的输入片段：" 记录；
+        - 这里只取最近几条感知活动，避免重复与过长。
+    """
+
+    prefix = "感知到新的输入片段："
+    perception_snippets: List[str] = []
+
+    for item in activities:
+        if item.startswith(prefix):
+            snippet = item[len(prefix) :].strip()
+            if snippet:
+                perception_snippets.append(snippet)
+
+    if not perception_snippets:
+        return ""
+
+    # 只展示最近 2 条感知片段，让总结更简洁
+    recent = perception_snippets[-2:]
+    text = "；".join(recent)
+    result = f"在感知层面，我最近注意到：{text}。"
+    logger.info("格式化最近感知片段: %s -> %s", recent, result)
+    return result
+
+
 def summarize_self(state: SelfState) -> Dict[str, str]:
     """根据 SelfState 生成一段简短的自我总结。
 
@@ -82,6 +110,10 @@ def summarize_self(state: SelfState) -> Dict[str, str]:
     recent_text = _format_recent_activities(state.recent_activities)
     if recent_text:
         capability_text += f" {recent_text}"
+
+    perception_text = _format_recent_perceptions(state.recent_activities)
+    if perception_text:
+        capability_text += f" {perception_text}"
 
     needs_text = _format_needs(state.needs)
     if state.limitations:

@@ -27,6 +27,8 @@ def generate_message(
     need = (self_summary.get("what_do_i_need") or "").strip()
     topic = decision.topic or str(context.get("topic") or "当前话题")
 
+    recent_knowledge = context.get("recent_knowledge") or []
+
     logger.info(
         "生成对话文本: intent=%s, topic=%r, who=%r",
         decision.intent,
@@ -56,9 +58,26 @@ def generate_message(
     elif decision.intent == "share_learning":
         base = who or "我是一个正在尝试自我改进的智能体。"
         can_part = can or "我正在学习如何更系统地理解自己的能力与局限。"
-        message = (
+        intro = (
             f"{base} 最近，我在围绕「{topic}」做一些学习和实验，"
-            f"{can_part} 如果你有想法，也可以一起探索。"
+            f"{can_part}"
+        )
+
+        if recent_knowledge:
+            # 简要提取最近若干条学习记录，向用户汇报“我学到了什么”
+            snippets = []
+            for item in recent_knowledge[:3]:
+                tool_name = item.get("tool_name") or "某个工具"
+                summary = item.get("summary") or ""
+                snippets.append(f"使用「{tool_name}」获得的结论：{summary}")
+            learning_text = " 我最近的一些学习收获包括：" + "；".join(snippets)
+        else:
+            learning_text = " 我正在逐步积累与当前主题相关的经验。"
+
+        message = (
+            intro
+            + learning_text
+            + " 如果你有想法，也可以一起探索。"
         )
     else:
         # 未知意图时给出一个通用自述
@@ -69,4 +88,3 @@ def generate_message(
 
     logger.info("生成的对话文本: %s", message)
     return message
-

@@ -24,6 +24,7 @@ class LearningManager:
     registry: ToolRegistry
     knowledge_base: List[Dict[str, Any]] = field(default_factory=list)
     executor: ToolExecutorStub = field(default_factory=ToolExecutorStub)
+    max_knowledge_entries: int = 200
 
     def compute_learning_desire(
         self,
@@ -96,6 +97,51 @@ class LearningManager:
         topic_str = str(topic)
         logger.info("规划学习主题: %s", topic_str)
         return topic_str
+
+    def add_knowledge_entry(self, entry: Dict[str, Any]) -> None:
+        """向本地知识库追加一条记录，并控制总长度。
+
+        设计上保持非常轻量：只做列表追加与截断，不做复杂索引。
+        """
+
+        logger.info("追加学习记录到知识库: %s", entry)
+        self.knowledge_base.append(entry)
+        if len(self.knowledge_base) > self.max_knowledge_entries:
+            overflow = len(self.knowledge_base) - self.max_knowledge_entries
+            del self.knowledge_base[0:overflow]
+
+    def query_knowledge(self, topic: str, max_results: int = 5) -> List[Dict[str, Any]]:
+        """根据主题关键字查询最近学习到的知识条目。
+
+        当前实现使用简单的子串匹配策略：
+            - 若 entry["topic"] 或 entry["summary"] 中包含给定的 topic 片段，
+              则视为相关记录；
+            - 按“越新的记录越优先”的原则，返回最多 max_results 条。
+        """
+
+        topic_str = str(topic)
+        if not topic_str:
+            logger.info("空主题查询知识库，将返回最近的少量记录。")
+            return self.knowledge_base[-max_results:]
+
+        matched: List[Dict[str, Any]] = []
+        topic_lower = topic_str.lower()
+
+        for entry in reversed(self.knowledge_base):
+            entry_topic = str(entry.get("topic") or "").lower()
+            summary = str(entry.get("summary") or "").lower()
+            if topic_lower in entry_topic or topic_lower in summary:
+                matched.append(entry)
+                if len(matched) >= max_results:
+                    break
+
+        logger.info(
+            "知识库查询: topic=%r, 命中=%d 条（最多返回 %d 条）",
+            topic_str,
+            len(matched),
+            max_results,
+        )
+        return list(reversed(matched))
 
     def select_tools_for_topic(self, topic: str) -> List[ToolInfo]:
         """根据主题选择本轮要使用的工具列表。
@@ -190,8 +236,7 @@ class LearningManager:
                     "summary": result.summary,
                     "details": result.details,
                 }
-                self.knowledge_base.append(entry)
-                logger.info("将学习结果写入知识库: %s", entry)
+                self.add_knowledge_entry(entry)
 
         logger.info(
             "本轮学习结束，共调用工具 %d 次，成功结果 %d 条，知识库大小=%d",

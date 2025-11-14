@@ -7,10 +7,11 @@ from typing import Dict, List, Optional, Tuple
 from me_core.dialogue import DialoguePlanner, InitiativeDecision, generate_message
 from me_core.drives.drive_update import implicit_adjust
 from me_core.learning.learning_manager import LearningManager
+from me_core.perception import encode_to_event
 from me_core.self_model.self_summarizer import summarize_self
 from me_core.self_model.self_updater import aggregate_stats, update_from_event
 from me_core.tools.registry import ToolInfo, ToolRegistry
-from me_core.types import AgentEvent
+from me_core.types import AgentEvent, MultiModalInput
 
 from .state_store import StateStore
 
@@ -74,24 +75,14 @@ def run_once(
 
     logger.info("开始执行一轮 agent 主循环，当前时间: %s", context["time_iso"])
 
-    # 生成自我总结
-    self_summary = summarize_self(self_state)
-
-    # 对话决策与生成
-    planner = DialoguePlanner()
-    decision = planner.decide_initiative(drives, self_summary, context)
-
-    message = ""
-    if decision.should_speak:
-        message = generate_message(decision, self_summary, context)
-        if message:
-            # 日志与标准输出都记录，方便在不同环境中观察
-            logger.info("Agent 主动发言: %s", message)
-            print(message)  # noqa: T201
-            store.add_event_summary(f"say: {message}")
-    else:
-        logger.info("本轮决策为保持沉默。")
-        store.add_event_summary("silent")
+    # 先模拟一次简单的多模态感知，将其作为事件写入自我模型与事件流
+    perception_input = MultiModalInput(
+        text=f"当前时间 {context['time_iso']}，当前主题：{context['topic']}",
+    )
+    perception_event = encode_to_event(perception_input, source="agent_loop")
+    self_state = update_from_event(self_state, perception_event)
+    store.append_events([perception_event])
+    store.add_event_summary("perceive: 多模态感知了一次当前环境信息")
 
     # 模拟一次学习过程：不确定性简单设为 0.6
     registry = _build_default_tool_registry()
@@ -122,10 +113,9 @@ def run_once(
                 "topic": context.get("topic"),
             }
             # 预留错误信息字段，方便未来真实工具失败时记录局限
-            if not result.success:
-                details = getattr(result, "details", None)
-                if isinstance(details, dict) and details.get("message"):
-                    payload["error"] = str(details["message"])
+            details = getattr(result, "details", None)
+            if (not result.success) and isinstance(details, dict) and details.get("message"):
+                payload["error"] = str(details["message"])
 
             event = AgentEvent.now(event_type="task", payload=payload)
             tool_events.append(event)
@@ -153,8 +143,37 @@ def run_once(
             success_ratio,
             drives,
         )
+
+        # 将最近学习内容加入上下文，便于对话模块在需要时引用
+        recent_knowledge = learning_manager.query_knowledge(
+            topic=context.get("topic", ""),
+            max_results=3,
+        )
+        context["has_recent_learning"] = bool(recent_knowledge)
+        context["recent_knowledge"] = recent_knowledge
     else:
         store.add_event_summary("learn: skipped")
+        context["has_recent_learning"] = False
+        context["recent_knowledge"] = []
+
+    # 生成自我总结（此时已纳入感知与学习带来的自我更新）
+    self_summary = summarize_self(self_state)
+
+    # 对话决策与生成
+    planner = DialoguePlanner()
+    decision = planner.decide_initiative(drives, self_summary, context)
+
+    message = ""
+    if decision.should_speak:
+        message = generate_message(decision, self_summary, context)
+        if message:
+            # 日志与标准输出都记录，方便在不同环境中观察
+            logger.info("Agent 主动发言: %s", message)
+            print(message)  # noqa: T201
+            store.add_event_summary(f"say: {message}")
+    else:
+        logger.info("本轮决策为保持沉默。")
+        store.add_event_summary("silent")
 
     # 将状态写回存储
     store.set_self_state(self_state)
