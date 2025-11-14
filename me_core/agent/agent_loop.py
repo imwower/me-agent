@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from typing import Dict, Optional, Tuple
 
-from me_core.dialogue import DialoguePlanner, generate_message
+from me_core.dialogue import DialoguePlanner, InitiativeDecision, generate_message
 from me_core.learning.learning_manager import LearningManager
 from me_core.self_model.self_summarizer import summarize_self
 from me_core.tools.registry import ToolInfo, ToolRegistry
@@ -41,7 +42,9 @@ def _build_default_tool_registry() -> ToolRegistry:
     return registry
 
 
-def run_once() -> None:
+def run_once(
+    return_details: bool = False,
+) -> Optional[Tuple[Dict[str, str], InitiativeDecision, str]]:
     """执行一轮简单的 agent 主循环。
 
     步骤：
@@ -74,6 +77,7 @@ def run_once() -> None:
     planner = DialoguePlanner()
     decision = planner.decide_initiative(drives, self_summary, context)
 
+    message = ""
     if decision.should_speak:
         message = generate_message(decision, self_summary, context)
         if message:
@@ -109,3 +113,5 @@ def run_once() -> None:
 
     logger.info("本轮 agent 主循环结束。")
 
+    if return_details:
+        return self_summary, decision, message
