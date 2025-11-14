@@ -136,6 +136,12 @@ class SelfUpdaterTestCase(unittest.TestCase):
         self.assertTrue(
             any("generate_code" in x for x in new_state.limitations)
         )
+        # 能力变化趋势中应反映 summarize 提升、generate_code 略有下降
+        trend = new_state.capability_trend
+        self.assertIn("summarize", trend)
+        self.assertGreater(trend["summarize"], 0.0)
+        self.assertIn("generate_code", trend)
+        self.assertLess(trend["generate_code"], 0.0)
 
 
 class SelfSummarizerTestCase(unittest.TestCase):

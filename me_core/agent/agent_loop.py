@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 from me_core.dialogue import DialoguePlanner, InitiativeDecision, generate_message
@@ -16,6 +17,22 @@ from me_core.types import AgentEvent, MultiModalInput
 from .state_store import StateStore
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(slots=True)
+class AgentLoopConfig:
+    """Agent 主循环的可调配置项。
+
+    目前仅包含少量关键超参数，后续如有需要可以逐步扩展：
+        - learning_uncertainty: 学习阶段使用的“不确定性”估计值；
+        - history_window: 聚合历史能力统计时使用的事件窗口大小。
+    """
+
+    learning_uncertainty: float = 0.6
+    history_window: int = 100
+
+
+DEFAULT_AGENT_LOOP_CONFIG = AgentLoopConfig()
 
 
 def _build_default_tool_registry() -> ToolRegistry:
@@ -48,6 +65,7 @@ def _build_default_tool_registry() -> ToolRegistry:
 
 def run_once(
     return_details: bool = False,
+    config: Optional[AgentLoopConfig] = None,
 ) -> Optional[Tuple[Dict[str, str], InitiativeDecision, str]]:
     """执行一轮简单的 agent 主循环。
 
@@ -61,6 +79,9 @@ def run_once(
         7. 根据学习结果构造 AgentEvent，更新 SelfState 与 Drives；
         8. 将状态写回 StateStore。
     """
+
+    if config is None:
+        config = DEFAULT_AGENT_LOOP_CONFIG
 
     store = StateStore()
     self_state = store.get_self_state()
@@ -89,7 +110,7 @@ def run_once(
     learning_manager = LearningManager(registry=registry)
 
     learning_results = learning_manager.maybe_learn(
-        uncertainty=0.6,
+        uncertainty=config.learning_uncertainty,
         drives=drives,
         context=context,
     )
@@ -128,7 +149,7 @@ def run_once(
 
         # 将新事件加入状态存储，并基于历史事件重新聚合能力与局限
         store.append_events(tool_events)
-        history = store.get_events(limit=100)
+        history = store.get_events(limit=config.history_window)
         self_state = aggregate_stats(self_state, history)
         logger.info("基于最近 %d 条事件聚合后的自我状态: %s", len(history), self_state)
 

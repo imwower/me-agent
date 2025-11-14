@@ -88,6 +88,37 @@ def _format_recent_perceptions(activities: List[str]) -> str:
     return result
 
 
+def _format_capability_trend(trend: Dict[str, float]) -> str:
+    """将能力变化趋势转换为可读描述。
+
+    仅展示变化幅度较大的少数能力，帮助人类快速感知“我在哪些方面变强/变弱了”。
+    """
+
+    if not trend:
+        return ""
+
+    # 按绝对变化幅度从大到小排序，重点展示前几项
+    items = sorted(trend.items(), key=lambda x: abs(x[1]), reverse=True)
+    lines: List[str] = []
+    for name, delta in items[:3]:
+        if delta > 0:
+            if delta >= 0.2:
+                degree = "有明显提升"
+            else:
+                degree = "略有提升"
+        else:
+            if delta <= -0.2:
+                degree = "有明显下降"
+            else:
+                degree = "略有下降"
+        lines.append(f"在「{name}」能力上{degree}")
+
+    text = "；".join(lines)
+    result = f"从最近几次任务来看，{text}。"
+    logger.info("格式化能力变化趋势: %s -> %s", trend, result)
+    return result
+
+
 def summarize_self(state: SelfState) -> Dict[str, str]:
     """根据 SelfState 生成一段简短的自我总结。
 
@@ -114,6 +145,10 @@ def summarize_self(state: SelfState) -> Dict[str, str]:
     perception_text = _format_recent_perceptions(state.recent_activities)
     if perception_text:
         capability_text += f" {perception_text}"
+
+    trend_text = _format_capability_trend(state.capability_trend)
+    if trend_text:
+        capability_text += f" {trend_text}"
 
     needs_text = _format_needs(state.needs)
     if state.limitations:

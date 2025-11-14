@@ -152,6 +152,8 @@ def aggregate_stats(state: SelfState, history: List[AgentEvent]) -> SelfState:
     """
 
     new_state = replace(state)
+    # 在聚合前记录一份旧的能力快照，用于后续计算“能力变化趋势”
+    previous_capabilities = dict(state.capabilities)
     stats = _collect_task_stats(history)
 
     logger.info("根据历史事件聚合更新自我状态，原状态: %s, 统计: %s", state, stats)
@@ -173,5 +175,16 @@ def aggregate_stats(state: SelfState, history: List[AgentEvent]) -> SelfState:
         if failure_count >= success_count * 2 and capability not in new_state.limitations:
             new_state.limitations.append(f"在任务 '{capability}' 上容易出错")
 
-    logger.info("聚合历史后的自我状态: %s", new_state)
+    # 计算能力变化趋势：仅记录变化幅度超过一定阈值的能力
+    trend: Dict[str, float] = {}
+    for capability, new_value in new_state.capabilities.items():
+        old_value = previous_capabilities.get(capability, 0.5)
+        delta = new_value - old_value
+        if abs(delta) < 0.05:
+            continue
+        trend[capability] = delta
+
+    new_state.capability_trend = trend
+
+    logger.info("聚合历史后的自我状态: %s, 能力变化趋势: %s", new_state, trend)
     return new_state
