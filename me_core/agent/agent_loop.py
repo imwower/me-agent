@@ -37,6 +37,35 @@ class AgentLoopConfig:
 DEFAULT_AGENT_LOOP_CONFIG = AgentLoopConfig()
 
 
+def _select_focus_topic(self_state) -> str:
+    """根据自我状态自动选择本轮学习关注的主题。
+
+    策略（从高到低优先级）：
+        1. 若存在明确的局限（limitations），优先围绕第一条局限进行学习；
+        2. 若存在能力明显下降（capability_trend 为负且幅度较大），
+           则围绕下降最明显的能力进行“补救性”学习；
+        3. 否则返回一个泛化主题，表示通用的自我改进。
+    """
+
+    # 1) 优先针对自我局限进行学习
+    if self_state.limitations:
+        return f"改善自身局限：{self_state.limitations[0]}"
+
+    # 2) 其次针对最近明显下降的能力进行自我改进
+    negative_trend = {
+        name: delta
+        for name, delta in self_state.capability_trend.items()
+        if delta < 0.0
+    }
+    if negative_trend:
+        # 选取下降幅度最大的能力（delta 最小）
+        target_capability = min(negative_trend, key=negative_trend.get)
+        return f"提高能力「{target_capability}」的表现"
+
+    # 3) 默认的通用学习主题
+    return "通用学习与自我改进"
+
+
 def _build_default_tool_registry() -> ToolRegistry:
     """构造一个带有少量默认工具的注册表。
 
@@ -90,13 +119,16 @@ def run_once(
     drives = store.get_drives()
 
     now = datetime.now(timezone.utc)
+
+    # 基于当前自我状态自动选择一个“本轮关注主题”，作为学习与感知的锚点
+    focus_topic = _select_focus_topic(self_state)
     context = {
         "time_iso": now.isoformat(),
-        "topic": "自我介绍与当前学习状态",
+        "topic": focus_topic,
         "source": "agent_loop",
     }
 
-    logger.info("开始执行一轮 agent 主循环，当前时间: %s", context["time_iso"])
+    logger.info("开始执行一轮 agent 主循环，当前时间: %s, 主题: %s", context["time_iso"], focus_topic)
 
     # 先模拟一次简单的多模态感知，将其作为事件写入自我模型与事件流
     perception_input = MultiModalInput(
