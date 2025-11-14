@@ -9,6 +9,25 @@ JsonDict = Dict[str, Any]
 
 
 @dataclass(slots=True)
+class MultiModalInput:
+    """多模态输入的统一占位结构。
+
+    当前阶段仅存放各模态的元信息与原始文本：
+        text: 文本内容（若存在），适合传给文本编码器
+        image_meta: 图像的元信息（如文件名、标签等）
+        audio_meta: 音频的元信息
+        video_meta: 视频的元信息
+
+    后续可以将其扩展为真正的多模态张量或引用。
+    """
+
+    text: Optional[str] = None
+    image_meta: Optional[JsonDict] = None
+    audio_meta: Optional[JsonDict] = None
+    video_meta: Optional[JsonDict] = None
+
+
+@dataclass(slots=True)
 class AgentEvent:
     """描述一次智能体的行为或感知事件。
 
@@ -98,4 +117,3 @@ class ToolResult:
         default_factory=lambda: datetime.now(timezone.utc)
     )
     meta: Optional[JsonDict] = None
-
