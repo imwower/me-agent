@@ -91,6 +91,15 @@ def _build_default_tool_registry() -> ToolRegistry:
             good_for=["simulation", "实验", "SNN"],
         )
     )
+    registry.register_tool(
+        ToolInfo(
+            name="codex",
+            type="llm",
+            cost=0.4,
+            description="调用 Codex 风格模型，对给定主题进行解释和扩展（桩实现，不访问外部网络）。",
+            good_for=[],  # 作为通用工具，默认对所有主题开放
+        )
+    )
     return registry
 
 

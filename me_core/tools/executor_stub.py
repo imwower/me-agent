@@ -120,6 +120,25 @@ class ToolExecutorStub:
                 summary=summary,
                 details=details,
             )
+        elif tool.name == "codex":
+            # 伪造 Codex 风格的“智能回答”
+            prompt = str(args.get("prompt") or topic)
+            simulated_answer = (
+                f"（Codex 桩实现）围绕「{topic}」给出了一段解释性回答，"
+                f"大致基于提示：{prompt[:80]}..."
+            )
+            details = {
+                "topic": topic,
+                "prompt": prompt,
+                "simulated_answer": simulated_answer,
+            }
+            summary = f"Codex 针对主题「{topic}」返回了一段说明性内容（桩实现）。"
+            result = ToolResult(
+                tool_name=tool.name,
+                success=True,
+                summary=summary,
+                details=details,
+            )
         else:
             # 未知工具采用通用兜底逻辑
             details = {
