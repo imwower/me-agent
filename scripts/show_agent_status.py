@@ -87,7 +87,22 @@ def main() -> None:
     else:
         print("\n  能力变化趋势：暂无显著变化。")  # noqa: T201
 
-    # 3) 最近事件摘要（近若干条）
+    # 3) 学习知识库概览
+    kb = store.get_knowledge_base()
+    if not kb:
+        print("\n[知识库] 当前为空。")  # noqa: T201
+    else:
+        print("\n[知识库最近条目]")  # noqa: T201
+        # 只展示最近若干条记录，避免输出过长
+        for entry in kb[-5:]:
+            tool_name = entry.get("tool_name") or "未知工具"
+            topic = entry.get("topic") or "未知主题"
+            summary = entry.get("summary") or ""
+            print(
+                f"  - tool={tool_name} topic={topic} summary={summary}"  # noqa: T201
+            )
+
+    # 4) 最近事件摘要（近若干条）
     events = store.get_events(limit=5)
     if not events:
         print("\n[最近事件] 尚无结构化事件记录。")  # noqa: T201
@@ -106,4 +121,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
