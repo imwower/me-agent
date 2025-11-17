@@ -2,6 +2,10 @@
 
 set -e
 
-echo "[评测] 当前版本尚未实现完整评测流水线，仅预留占位脚本。"
-echo "[评测] 可在后续版本中实现：汇总 VQA/OCR/图表任务指标并输出 CSV 与折线图。"
+PRED_FILE="${1:-outputs/predictions.jsonl}"
+REF_FILE="${2:-outputs/references.jsonl}"
 
+echo "[评测] 使用预测文件: ${PRED_FILE}"
+echo "[评测] 使用参考文件: ${REF_FILE}"
+
+python -m src.eval.run_eval_all --pred "${PRED_FILE}" --ref "${REF_FILE}"
