@@ -490,11 +490,13 @@ class AgentState:
         drives: 内在驱动力向量（DriveVector）；
         world_model_state: 世界模型内部状态的轻量表示（例如参数摘要、统计信息）；
         memory_state: 记忆系统状态（例如最近轨迹摘要、事件计数等）；
-        tool_library_state: 工具库状态（例如现有 ToolProgram 名单及其统计）。
+        tool_library_state: 工具库状态（例如现有 ToolProgram 名单及其统计）；
+        global_step: 个体内部全局步数计数器，用于对齐各模块中的“最近使用步数”等信息；
+        env_state_summary: 环境对该个体暴露的高层状态摘要（例如关卡 ID、场景标识）。
 
     注意：
-        - world_model_state / memory_state / tool_library_state 在当前阶段仅作为
-          “信息容器”，具体字段由各子模块自行约定；
+        - world_model_state / memory_state / tool_library_state / env_state_summary
+          在当前阶段仅作为“信息容器”，具体字段由各子模块自行约定；
         - 这里统一使用 JsonDict，以保持序列化简单、接口稳定。
     """
 
@@ -503,6 +505,8 @@ class AgentState:
     world_model_state: JsonDict = field(default_factory=dict)
     memory_state: JsonDict = field(default_factory=dict)
     tool_library_state: JsonDict = field(default_factory=dict)
+    global_step: int = 0
+    env_state_summary: JsonDict = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -510,6 +514,8 @@ class Genotype:
     """用于编码一个个体“先天配置”的基因型结构。
 
     字段：
+        id: 基因型自身的标识（可选），便于追踪谱系；
+        parent_ids: 产生该基因型的父基因型 ID 列表；
         world_model_config: 世界模型相关配置（结构自由）；
         learning_config: 学习与元学习相关配置；
         drive_baseline: 驱动力基线（例如 DriveVector 的默认值字典形式）；
@@ -520,6 +526,8 @@ class Genotype:
         - 在进化阶段进行变异/交叉，生成新的候选个体。
     """
 
+    id: Optional[str] = None
+    parent_ids: list[str] = field(default_factory=list)
     world_model_config: JsonDict = field(default_factory=dict)
     learning_config: JsonDict = field(default_factory=dict)
     drive_baseline: JsonDict = field(default_factory=dict)
@@ -535,7 +543,12 @@ class Individual:
         agent_state: 当前智能体内部状态聚合（AgentState）；
         genotype: 该个体的基因型配置（Genotype）；
         fitness: 当前估计的适应度值；
-        age: 已经历的代数或生命周期步数。
+        age: 已经历的生命周期步数（以环境 step 为单位）；
+        generation: 所处进化代数（由 PopulationManager 维护）；
+        parent_ids: 产生该个体的父个体 ID 列表；
+        env_id: 该个体主要评估环境的标识（可选）；
+        eval_count: 对该个体进行评估的次数；
+        frozen: 若为 True，表示该个体在后续进化中不再参与变异，只作为参考/基线。
 
     PopulationManager 将围绕 Individual 进行评估、选择、变异和繁衍。
     """
@@ -545,3 +558,8 @@ class Individual:
     genotype: Genotype
     fitness: float = 0.0
     age: int = 0
+    generation: int = 0
+    parent_ids: list[str] = field(default_factory=list)
+    env_id: Optional[str] = None
+    eval_count: int = 0
+    frozen: bool = False

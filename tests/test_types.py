@@ -165,12 +165,16 @@ class AgentStateAndPopulationTypesTestCase(unittest.TestCase):
             world_model_state={"param_count": 10},
             memory_state={"events": 5},
             tool_library_state={"tool_count": 2},
+            global_step=42,
+            env_state_summary={"level_id": "L1"},
         )
 
         self.assertEqual(state.self_state.identity, "一个用于测试的智能体")
         self.assertIn("param_count", state.world_model_state)
         self.assertIn("events", state.memory_state)
         self.assertIn("tool_count", state.tool_library_state)
+        self.assertEqual(state.global_step, 42)
+        self.assertIn("level_id", state.env_state_summary)
 
     def test_genotype_and_individual_basic(self) -> None:
         """Genotype / Individual 应能构造并挂接 AgentState。"""
@@ -180,6 +184,8 @@ class AgentStateAndPopulationTypesTestCase(unittest.TestCase):
         agent_state = AgentState(self_state=self_state, drives=drives)
 
         genotype = Genotype(
+            id="g-1",
+            parent_ids=["g-0"],
             world_model_config={"layers": 2},
             learning_config={"lr": 0.01},
             drive_baseline={"chat_level": 0.3},
@@ -192,13 +198,24 @@ class AgentStateAndPopulationTypesTestCase(unittest.TestCase):
             genotype=genotype,
             fitness=1.23,
             age=2,
+            generation=1,
+            parent_ids=["parent-1"],
+            env_id="gridworld-v0",
+            eval_count=3,
+            frozen=True,
         )
 
         self.assertEqual(ind.id, "ind-1")
         self.assertEqual(ind.agent_state.self_state.identity, "种群个体")
+        self.assertEqual(ind.genotype.id, "g-1")
         self.assertEqual(ind.genotype.world_model_config["layers"], 2)
         self.assertAlmostEqual(ind.fitness, 1.23)
         self.assertEqual(ind.age, 2)
+        self.assertEqual(ind.generation, 1)
+        self.assertEqual(ind.parent_ids, ["parent-1"])
+        self.assertEqual(ind.env_id, "gridworld-v0")
+        self.assertEqual(ind.eval_count, 3)
+        self.assertTrue(ind.frozen)
 
 
 if __name__ == "__main__":
