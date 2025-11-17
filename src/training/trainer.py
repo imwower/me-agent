@@ -10,7 +10,7 @@ import yaml
 from torch.optim import AdamW
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from src.datamodules.chinese_simplevqa import load_chinese_simplevqa
+from src.training.dataloader import build_vqa_cn_stream
 
 logger = logging.getLogger(__name__)
 
@@ -95,32 +95,15 @@ def main() -> None:
     )
 
     # --------- 构造最小 VQA 训练数据流 ----------
-    ds_cfg = dataset_cfg.get("dataset", {})
-    ds_name = ds_cfg.get("name", "vqa_cn")
+    ds_cfg = dataset_cfg
+    ds_name = ds_cfg.get("dataset", {}).get("name", "vqa_cn")
     if ds_name != "vqa_cn":
         logger.warning("当前 Demo 仅实现 vqa_cn 训练，将忽略 dataset.name=%s。", ds_name)
 
-    hf_cfgs = ds_cfg.get("datasets", [])
-    if not hf_cfgs:
-        raise RuntimeError("dataset.datasets 为空，无法构造训练数据。")
-
-    hf_cfg = hf_cfgs[0]
-    hf_split = hf_cfg.get("split", "train")
-    sample_ratio = float(hf_cfg.get("sample_ratio", 0.1))
-    cache_dir = ds_cfg.get("cache_dir", "data/cache")
-    max_samples = int(ds_cfg.get("max_samples", 1000))
-
     def sample_stream() -> Iterable[Dict[str, Any]]:
-        count = 0
-        for uni in load_chinese_simplevqa(
-            split=hf_split,
-            sample_ratio=sample_ratio,
-            cache_dir=cache_dir,
-        ):
-            yield uni.to_dict()
-            count += 1
-            if count >= max_samples:
-                break
+        """对外暴露的样本流包装，内部使用 dataloader.build_vqa_cn_stream。"""
+
+        return build_vqa_cn_stream(ds_cfg)
 
     # --------- 初始化文本解码器（作为最小模型） ----------
     text_cfg = model_cfg.get("model", {}).get("text_decoder", {})
