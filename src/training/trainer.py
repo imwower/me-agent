@@ -7,10 +7,11 @@ from typing import Any, Dict, Iterable, List
 
 import torch
 import yaml
-from torch.optim import AdamW
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from src.training.dataloader import build_vqa_cn_stream
+from src.training.losses import build_batch_texts_from_stream, compute_lm_step_loss
+from src.training.optimizer import clip_gradients, create_optimizer, create_scheduler
 
 logger = logging.getLogger(__name__)
 
@@ -119,63 +120,48 @@ def main() -> None:
     model.to(device)
     model.train()
 
-    optimizer = AdamW(
-        model.parameters(),
-        lr=float(train_cfg.get("lr", 1.0e-4)),
-        weight_decay=float(train_cfg.get("weight_decay", 0.01)),
-    )
+    optimizer = create_optimizer(model, train_cfg)
 
     max_steps = int(train_cfg.get("max_steps", 100))
     grad_accum = int(train_cfg.get("gradient_accumulation_steps", 1))
     batch_size = int(train_cfg.get("batch_size", 4))
+
+    scheduler = create_scheduler(
+        optimizer,
+        train_cfg,
+        num_training_steps=max_steps,
+    )
 
     global_step = 0
     running_loss = 0.0
 
     logger.info("开始最小 VQA 训练循环: max_steps=%d, batch_size=%d", max_steps, batch_size)
 
-    # 简单批处理：每次从流中取 batch_size 条样本
+    # 简单批处理：每次从样本流中取 batch_size 条样本文本
     stream_iter = iter(sample_stream())
     while global_step < max_steps:
-        batch_texts: List[str] = []
-
-        for _ in range(batch_size):
-            try:
-                ex = next(stream_iter)
-            except StopIteration:
-                stream_iter = iter(sample_stream())
-                ex = next(stream_iter)
-
-            q = ex.get("question") or ""
-            ans_list = ex.get("answers") or []
-            if not ans_list:
-                continue
-            a = ans_list[0]
-            # 简单将“问题 + 答案”拼接为训练样本
-            text = f"问题：{q}\n答案：{a}"
-            batch_texts.append(text)
+        batch_texts = build_batch_texts_from_stream(stream_iter, batch_size)
 
         if not batch_texts:
             logger.warning("本批次未采样到有效样本，结束训练循环。")
             break
 
-        enc = tokenizer(
-            batch_texts,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-            max_length=max_length,
-        ).to(device)
-
         # 使用语言模型自回归损失（输入=标签）
-        outputs = model(**enc, labels=enc["input_ids"])
-        loss = outputs.loss / grad_accum
+        loss, scalar_loss = compute_lm_step_loss(
+            model,
+            tokenizer,
+            batch_texts,
+            device=device,
+            max_length=max_length,
+            grad_accum_steps=grad_accum,
+        )
         loss.backward()
-        running_loss += loss.item()
+        running_loss += scalar_loss
 
         if (global_step + 1) % grad_accum == 0:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            clip_gradients(model, max_norm=1.0)
             optimizer.step()
+            scheduler.step()
             optimizer.zero_grad()
 
         global_step += 1
