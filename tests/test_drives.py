@@ -1,7 +1,11 @@
 import logging
 import unittest
 
-from me_core.drives.drive_update import apply_user_command, implicit_adjust
+from me_core.drives.drive_update import (
+    apply_baseline_homeostasis,
+    apply_user_command,
+    implicit_adjust,
+)
 from me_core.drives.drive_vector import DriveVector
 
 
@@ -221,6 +225,39 @@ class DriveUpdateTestCase(unittest.TestCase):
         self.assertLess(current.social_need, first.social_need)
         self.assertGreater(current.chat_level, 0.1)
         self.assertGreater(current.social_need, 0.1)
+
+    def test_apply_baseline_homeostasis_moves_towards_baseline(self) -> None:
+        """apply_baseline_homeostasis 应让驱动力缓慢向基线回归。"""
+
+        drives = DriveVector(
+            chat_level=0.9,
+            curiosity_level=0.2,
+            exploration_level=0.8,
+            learning_intensity=0.1,
+            social_need=0.9,
+            data_need=0.2,
+        )
+
+        baseline = {
+            "chat_level": 0.5,
+            "curiosity_level": 0.5,
+            "exploration_level": 0.5,
+            "learning_intensity": 0.5,
+            "social_need": 0.5,
+            "data_need": 0.5,
+        }
+
+        updated = apply_baseline_homeostasis(drives, baseline, alpha=0.2)
+
+        # chat/social 应从 0.9 向 0.5 靠近
+        self.assertLess(updated.chat_level, drives.chat_level)
+        self.assertLess(updated.social_need, drives.social_need)
+        self.assertGreater(updated.chat_level, 0.5)
+
+        # curiosity/data_need 应从 0.2 向 0.5 靠近
+        self.assertGreater(updated.curiosity_level, drives.curiosity_level)
+        self.assertGreater(updated.data_need, drives.data_need)
+        self.assertLess(updated.curiosity_level, 0.5)
 
 
 if __name__ == "__main__":

@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Optional, Type, TypeVar
+
+# 为了在类型层集中暴露核心状态结构，这里仅定义/聚合“轻量数据结构”。
+# 复杂的更新逻辑仍然放在各自子模块中（如 self_model / drives 等），
+# 以避免 types.py 演化成一个“上帝模块”。
 
 # 通用类型别名：用于在整个项目中复用
 JsonDict = Dict[str, Any]
@@ -61,6 +65,15 @@ class ToolKind(str, Enum):
 TAgentEvent = TypeVar("TAgentEvent", bound="AgentEvent")
 TToolCall = TypeVar("TToolCall", bound="ToolCall")
 TToolResult = TypeVar("TToolResult", bound="ToolResult")
+
+# SelfState / DriveVector 的完整定义位于各自子包中，
+# 在此仅做类型级引用，作为 AgentState 等聚合结构的组成部分。
+try:  # 避免在类型定义早期导入时产生循环依赖
+    from me_core.self_model.self_state import SelfState  # type: ignore  # noqa: WPS433
+    from me_core.drives.drive_vector import DriveVector  # type: ignore  # noqa: WPS433
+except Exception:  # pragma: no cover - 仅在极早期导入/静态分析时触发
+    SelfState = object  # type: ignore
+    DriveVector = object  # type: ignore
 
 
 @dataclass(slots=True)
@@ -422,3 +435,113 @@ class ToolResult:
 
     def __str__(self) -> str:  # pragma: no cover - 简单代理 pretty
         return self.pretty()
+
+
+@dataclass(slots=True)
+class ToolStats:
+    """工具使用统计信息。
+
+    字段：
+        usage_count: 调用总次数；
+        success_count: 成功次数；
+        avg_gain: 平均收益（例如预测误差降低量的平均值）；
+        last_used_step: 最近一次被调用时的全局 step 编号。
+
+    该结构将作为 ToolProgram 内部的“表现记录”，供学习与进化模块使用。
+    """
+
+    usage_count: int = 0
+    success_count: int = 0
+    avg_gain: float = 0.0
+    last_used_step: int = -1
+
+
+@dataclass(slots=True)
+class ToolProgram:
+    """表示一个可被调用的“工具程序”。
+
+    字段：
+        name: 工具名称（在 ToolLibrary 中应唯一）；
+        dsl_source: 工具内部 DSL 源码或序列表示；
+        input_spec: 输入规范（例如参数名称列表），当前用字典占位；
+        output_spec: 输出规范（例如返回字段说明），当前用字典占位；
+        parents: 产生该工具的“父工具”名称列表，用于追踪进化谱系；
+        stats: 与该工具相关的统计信息（ToolStats）。
+
+    说明：
+        - 在早期阶段，dsl_source 可以是简单的 JSON 序列或伪代码字符串；
+        - 后续 Phase 会在 tools.dsl 模块中引入真正的 DSL 定义与解析逻辑。
+    """
+
+    name: str
+    dsl_source: str
+    input_spec: JsonDict = field(default_factory=dict)
+    output_spec: JsonDict = field(default_factory=dict)
+    parents: list[str] = field(default_factory=list)
+    stats: ToolStats = field(default_factory=ToolStats)
+
+
+@dataclass(slots=True)
+class AgentState:
+    """智能体内部的聚合状态结构。
+
+    字段：
+        self_state: 自我模型状态（SelfState）；
+        drives: 内在驱动力向量（DriveVector）；
+        world_model_state: 世界模型内部状态的轻量表示（例如参数摘要、统计信息）；
+        memory_state: 记忆系统状态（例如最近轨迹摘要、事件计数等）；
+        tool_library_state: 工具库状态（例如现有 ToolProgram 名单及其统计）。
+
+    注意：
+        - world_model_state / memory_state / tool_library_state 在当前阶段仅作为
+          “信息容器”，具体字段由各子模块自行约定；
+        - 这里统一使用 JsonDict，以保持序列化简单、接口稳定。
+    """
+
+    self_state: "SelfState"
+    drives: "DriveVector"
+    world_model_state: JsonDict = field(default_factory=dict)
+    memory_state: JsonDict = field(default_factory=dict)
+    tool_library_state: JsonDict = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class Genotype:
+    """用于编码一个个体“先天配置”的基因型结构。
+
+    字段：
+        world_model_config: 世界模型相关配置（结构自由）；
+        learning_config: 学习与元学习相关配置；
+        drive_baseline: 驱动力基线（例如 DriveVector 的默认值字典形式）；
+        tool_config: 工具系统相关配置（例如初始工具集、DSL 超参数等）。
+
+    Genotype 在种群层面用于：
+        - 初始化个体的 AgentCore / AgentState；
+        - 在进化阶段进行变异/交叉，生成新的候选个体。
+    """
+
+    world_model_config: JsonDict = field(default_factory=dict)
+    learning_config: JsonDict = field(default_factory=dict)
+    drive_baseline: JsonDict = field(default_factory=dict)
+    tool_config: JsonDict = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class Individual:
+    """种群中的单个个体。
+
+    字段：
+        id: 个体唯一标识；
+        agent_state: 当前智能体内部状态聚合（AgentState）；
+        genotype: 该个体的基因型配置（Genotype）；
+        fitness: 当前估计的适应度值；
+        age: 已经历的代数或生命周期步数。
+
+    PopulationManager 将围绕 Individual 进行评估、选择、变异和繁衍。
+    """
+
+    id: str
+    agent_state: AgentState
+    genotype: Genotype
+    fitness: float = 0.0
+    age: int = 0

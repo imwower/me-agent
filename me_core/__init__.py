@@ -1,7 +1,7 @@
 """me-agent 核心包。
 
-当前仅提供基础数据结构定义，用于描述智能体的事件与工具调用。
-后续会在此包内逐步添加各功能模块的公共接口，例如：
+当前主要提供基础数据结构定义，用于描述智能体的事件、工具调用与
+种群级别的若干公共类型。后续会在此包内逐步添加各功能模块的公共接口，例如：
 
 - 感知（perception）
 - 世界模型（world_model）
@@ -13,11 +13,25 @@
 - 智能体编排（agent）
 """
 
-from .types import AgentEvent, ToolCall, ToolResult
+from .types import (  # noqa: F401
+    AgentEvent,
+    AgentState,
+    Genotype,
+    Individual,
+    ToolCall,
+    ToolProgram,
+    ToolResult,
+    ToolStats,
+)
 
 __all__ = [
     "AgentEvent",
     "ToolCall",
     "ToolResult",
+    "ToolStats",
+    "ToolProgram",
+    "AgentState",
+    "Genotype",
+    "Individual",
 ]
 

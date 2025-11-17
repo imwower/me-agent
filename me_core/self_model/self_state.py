@@ -64,3 +64,14 @@ class SelfState:
             needs=list(data.get("needs", [])) or [],
             capability_trend=dict(data.get("capability_trend", {})) or {},
         )
+
+
+def default_self_state() -> SelfState:
+    """构造一个带有合理默认值的 SelfState 实例。
+
+    设计意图：
+        - 作为 AgentState 初始化时的“自我模型基线”；
+        - 便于在不同场景中快速获得一致的起点，而不是每次手写字段。
+    """
+
+    return SelfState()

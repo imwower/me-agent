@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
-from typing import Any, Dict
+from typing import Any, Dict, Mapping
 
 from .config import DEFAULT_DRIVES_CONFIG
 from .drive_vector import DriveVector
@@ -195,4 +195,65 @@ def implicit_adjust(drives: DriveVector, feedback: Dict[str, Any]) -> DriveVecto
     new_drives.clamp()
 
     logger.info("隐式调整后的驱动力: %s", new_drives)
+    return new_drives
+
+
+def apply_baseline_homeostasis(
+    drives: DriveVector,
+    baseline: Mapping[str, float],
+    alpha: float = 0.1,
+) -> DriveVector:
+    """根据给定的基线驱动力，让当前驱动缓慢回归“默认水平”。
+
+    设计意图：
+        - 驱动力在长期运行中会受到各种显式/隐式反馈的影响；
+        - 为避免参数漂移到极端值，这里提供一个“向基线缓慢回归”的机制；
+        - 使用简单的一阶平滑公式：
+              new = old * (1 - alpha) + baseline * alpha
+          其中 alpha ∈ (0,1)，越大表示回归越快。
+
+    参数：
+        drives: 当前驱动力向量；
+        baseline: 各字段的基线值字典，例如 {"chat_level": 0.5, ...}；
+        alpha: 回归速率系数，默认 0.1。
+
+    返回：
+        一个新的 DriveVector 实例，表示回归后的驱动力。
+    """
+
+    if alpha <= 0.0:
+        # alpha 为 0 时不进行任何回归，直接返回原驱动力的拷贝
+        logger.info("alpha <= 0，跳过基线回归，直接返回原驱动力副本。")
+        return replace(drives)
+
+    new_drives = replace(drives)
+
+    logger.info(
+        "应用基线稳态前的驱动力: %s, baseline=%s, alpha=%.3f",
+        drives,
+        baseline,
+        alpha,
+    )
+
+    for field_name in (
+        "chat_level",
+        "curiosity_level",
+        "exploration_level",
+        "learning_intensity",
+        "social_need",
+        "data_need",
+    ):
+        old_value = getattr(new_drives, field_name)
+        base_value_raw = baseline.get(field_name, old_value)
+        try:
+            base_value = float(base_value_raw)
+        except (TypeError, ValueError):
+            base_value = old_value
+
+        new_value = old_value * (1.0 - alpha) + base_value * alpha
+        setattr(new_drives, field_name, new_value)
+
+    new_drives.clamp()
+
+    logger.info("应用基线稳态后的驱动力: %s", new_drives)
     return new_drives
