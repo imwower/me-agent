@@ -1,0 +1,8 @@
+defaults:
+  - model: model_base_demo.yaml
+  - dataset: dataset_vqa_cn.yaml
+
+experiment:
+  name: "vqa_cn_demo_gpt2"
+  output_dir: "outputs/vqa_cn_demo_gpt2"
+

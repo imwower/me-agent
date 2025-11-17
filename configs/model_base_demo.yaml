@@ -1,0 +1,39 @@
+model:
+  vision_encoder:
+    name: "open_clip_vit_b16"
+    pretrained: "openai"
+    embed_dim: 512
+
+  text_decoder:
+    # 使用公开可用的 GPT-2 作为演示模型，避免私有/受限仓库导致下载失败。
+    model_name: "gpt2"
+    max_length: 64
+
+  bridge:
+    type: "qformer"
+    hidden_dim: 512
+    num_query_tokens: 32
+    lora_r: 8
+    lora_alpha: 16
+
+  heads:
+    vqa:
+      hidden_dim: 512
+    answerability:
+      hidden_dim: 256
+    ocr_pointer:
+      hidden_dim: 256
+    chart:
+      hidden_dim: 256
+
+training:
+  lr: 1.0e-4
+  weight_decay: 0.01
+  # 将步数与 batch 调小，便于在本地快速跑通一小段训练。
+  max_steps: 10
+  eval_steps: 5
+  gradient_accumulation_steps: 1
+  batch_size: 2
+  mixed_precision: "no"
+  device: "auto"
+
