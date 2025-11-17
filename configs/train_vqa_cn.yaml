@@ -1,0 +1,8 @@
+defaults:
+  - model: model_base.yaml
+  - dataset: dataset_vqa_cn.yaml
+
+experiment:
+  name: "vqa_cn_demo"
+  output_dir: "outputs/vqa_cn"
+

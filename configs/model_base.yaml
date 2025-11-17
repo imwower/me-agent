@@ -1,0 +1,37 @@
+model:
+  vision_encoder:
+    name: "open_clip_vit_b16"
+    pretrained: "openai"
+    embed_dim: 512
+
+  text_decoder:
+    model_name: "IDEA-CCNL/Wenzhong2.0-GPT2-110M"
+    max_length: 64
+
+  bridge:
+    type: "qformer"
+    hidden_dim: 512
+    num_query_tokens: 32
+    lora_r: 8
+    lora_alpha: 16
+
+  heads:
+    vqa:
+      hidden_dim: 512
+    answerability:
+      hidden_dim: 256
+    ocr_pointer:
+      hidden_dim: 256
+    chart:
+      hidden_dim: 256
+
+training:
+  lr: 1.0e-4
+  weight_decay: 0.01
+  max_steps: 200
+  eval_steps: 50
+  gradient_accumulation_steps: 4
+  batch_size: 4
+  mixed_precision: "fp16"   # 可选: "fp16" / "bf16" / "no"
+  device: "auto"            # auto/mps/cpu
+

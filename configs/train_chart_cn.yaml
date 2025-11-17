@@ -1,0 +1,8 @@
+defaults:
+  - model: model_base.yaml
+  - dataset: dataset_chart_cn.yaml
+
+experiment:
+  name: "chart_cn_demo"
+  output_dir: "outputs/chart_cn"
+
