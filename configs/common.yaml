@@ -1,0 +1,36 @@
+device: "auto"          # auto/mps/cpu/cuda
+precision: "fp32"       # 目前未使用，预留混合精度配置
+seed: 42
+
+model_config: "configs/model_base.yaml"
+
+optimizer:
+  name: "AdamW"
+  lr: 2.0e-4
+  weight_decay: 0.01
+
+scheduler:
+  name: "cosine"
+  warmup_steps: 200      # 当前未使用，仅预留
+
+train:
+  max_steps: 400         # 默认小步数，便于在 M2 Max 上快速自检
+  grad_accum_steps: 4
+  batch_size_per_device: 1
+  save_every: 100        # 预留，当前未实际保存 checkpoint
+  answerability_weight: 1.0    # 文本可答性损失权重
+  ocr_pointer_weight: 1.0      # OCR 指针式拷贝损失权重（仅 ocr_vqa 任务）
+  chart_loss_weight: 1.0       # 图表抽取损失权重（仅 chart_qa 任务）
+  checkpoint_dir: "outputs/checkpoints"
+  checkpoint_name: "multitask_best.pt"
+
+multitask:
+  mix_ratio:
+    vqa_cn: 4
+    ocr_vqa: 3
+    chart_qa: 3
+
+datasets:
+  vqa_cn: "configs/dataset_vqa_cn.yaml"
+  ocr_vqa: "configs/dataset_ocr_vqa_cn.yaml"
+  chart_qa: "configs/dataset_chart_cn.yaml"

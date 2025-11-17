@@ -68,7 +68,7 @@ def main() -> None:
     # 将参考标注按 id 索引
     ref_map: Dict[str, Dict[str, Any]] = {ex["id"]: ex for ex in refs if "id" in ex}
 
-    # 按 task 汇总
+    # 按 task 汇总整体指标
     vqa_pred: List[str] = []
     vqa_ref: List[List[str]] = []
     ocr_pred: List[str] = []
@@ -78,13 +78,33 @@ def main() -> None:
     answerability_scores: List[float] = []
     answerability_labels: List[int] = []
 
+    # 按数据集维度再细分一层（task.dataset）
+    vqa_pred_by_ds: Dict[str, List[str]] = defaultdict(list)
+    vqa_ref_by_ds: Dict[str, List[List[str]]] = defaultdict(list)
+    ocr_pred_by_ds: Dict[str, List[str]] = defaultdict(list)
+    ocr_ref_by_ds: Dict[str, List[str]] = defaultdict(list)
+    chart_pred_by_ds: Dict[str, List[float]] = defaultdict(list)
+    chart_ref_by_ds: Dict[str, List[float]] = defaultdict(list)
+
+    # 为 coverage-risk 曲线准备 per-example 级别信息
+    coverage_items: List[Tuple[float, bool, bool]] = []
+
+    # 证据质量相关统计（OCR 证据命中率、图表元素覆盖率）
+    ocr_evi_hits = 0
+    ocr_evi_total = 0
+    chart_evi_hits = 0
+    chart_evi_total = 0
+
     for pred in preds:
         ex_id = pred.get("id")
         if ex_id is None or ex_id not in ref_map:
             continue
         ref = ref_map[ex_id]
         task = ref.get("task")
+        meta = ref.get("meta") or {}
+        dataset = str(meta.get("dataset") or "unknown")
         answer = str(pred.get("answer") or "")
+        conf = float(pred.get("confidence", 0.0))
 
         # 可答性
         abstain = bool(pred.get("abstain"))
@@ -93,26 +113,110 @@ def main() -> None:
         if isinstance(ref_answerable, bool):
             label = 1 if ref_answerable else 0
             answerability_labels.append(label)
-            # 使用 (1 - abstain) 作为简单可答性得分
-            answerability_scores.append(0.0 if abstain else 1.0)
+            # 使用推理阶段给出的 confidence 作为可答性置信度
+            answerability_scores.append(conf)
+
+        correct = False
+
+        # 预测给出的证据列表（用于 OCR/Chart 证据质量评估）
+        pred_evidence = pred.get("evidence") or []
 
         if task == "vqa_cn":
             vqa_pred.append(answer)
             vqa_ref.append(list(ref.get("answers") or []))
+            vqa_pred_by_ds[dataset].append(answer)
+            vqa_ref_by_ds[dataset].append(list(ref.get("answers") or []))
+
+            # 逐样本正确性（简化版 VQA-Acc）
+            norm_pred = answer.strip().lower()
+            norm_refs = {str(a).strip().lower() for a in (ref.get("answers") or [])}
+            correct = bool(norm_pred and norm_pred in norm_refs)
+
         elif task in ("ocr_vqa", "docvqa_cn"):
             ocr_pred.append(answer)
-            # 简化：仅取第一个参考答案
             ans_list = list(ref.get("answers") or [])
-            ocr_ref.append(ans_list[0] if ans_list else "")
+            ref_ans = ans_list[0] if ans_list else ""
+            ocr_ref.append(ref_ans)
+            ocr_pred_by_ds[dataset].append(answer)
+            ocr_ref_by_ds[dataset].append(ref_ans)
+
+            # 简化：预测文本是参考答案的子串即认为正确
+            correct = bool(answer.strip() and answer.strip() in ref_ans)
+
+            # OCR 证据命中率：若参考 OCR tokens 中有包含答案的 token，
+            # 则要求预测 evidence 中至少有一个 OCR 类型的 id 命中这些 token。
+            ref_evi = ref.get("evidence") or {}
+            ref_tokens = ref_evi.get("ocr_tokens") or []
+            gold_ids = set()
+            if ref_ans and ref_tokens:
+                for t in ref_tokens:
+                    t_text = str(t.get("text") or "")
+                    if t_text and (t_text in ref_ans or ref_ans in t_text):
+                        tid = t.get("id")
+                        if tid is not None:
+                            gold_ids.add(tid)
+            if gold_ids:
+                ocr_evi_total += 1
+                pred_ids = {
+                    e.get("id")
+                    for e in pred_evidence
+                    if str(e.get("type") or "").startswith("ocr")
+                }
+                if any(pid in gold_ids for pid in pred_ids):
+                    ocr_evi_hits += 1
+
         elif task == "chart_qa":
             try:
                 pred_val = float(answer)
                 true_list = list(ref.get("answers") or [])
                 true_val = float(true_list[0]) if true_list else 0.0
-                chart_pred_vals.append(pred_val)
-                chart_ref_vals.append(true_val)
             except ValueError:
                 continue
+
+            chart_pred_vals.append(pred_val)
+            chart_ref_vals.append(true_val)
+            chart_pred_by_ds[dataset].append(pred_val)
+            chart_ref_by_ds[dataset].append(true_val)
+
+            # 认为数值精确匹配时正确
+            correct = (pred_val == true_val)
+
+            # 图表元素覆盖率：从参考 chart_elements 中选择与答案最接近的元素，
+            # 要求预测 evidence 中至少有一个 chart_elem 类型的 id 命中该元素。
+            ref_evi = ref.get("evidence") or {}
+            ref_elems = ref_evi.get("chart_elements") or []
+            gold_elem_id = None
+            if ref_elems:
+                # 数值答案：选择数值最接近的元素
+                best_idx = None
+                best_diff = float("inf")
+                for idx_elem, elem in enumerate(ref_elems):
+                    meta = elem.get("meta") or {}
+                    v = meta.get("value") or meta.get("y") or meta.get("val") or meta.get("v")
+                    try:
+                        v_float = float(v)
+                    except Exception:  # noqa: BLE001
+                        continue
+                    diff = abs(v_float - true_val)
+                    if diff < best_diff:
+                        best_diff = diff
+                        best_idx = idx_elem
+                if best_idx is not None:
+                    gold_elem_id = ref_elems[best_idx].get("id")
+
+            if gold_elem_id is not None:
+                chart_evi_total += 1
+                pred_ids = {
+                    e.get("id")
+                    for e in pred_evidence
+                    if str(e.get("type") or "").startswith("chart")
+                }
+                if gold_elem_id in pred_ids:
+                    chart_evi_hits += 1
+
+        # 用于 coverage-risk：仅统计带标注的样本
+        if task in ("vqa_cn", "ocr_vqa", "docvqa_cn", "chart_qa"):
+            coverage_items.append((conf, abstain, correct))
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -131,8 +235,25 @@ def main() -> None:
     )
 
     # 简单 coverage-risk 曲线：以不同阈值过滤 abstain 比例与错误率（占位实现）
-    coverages = [1.0, 0.8, 0.6, 0.4, 0.2]
-    risks = [1.0 - vqa_acc for _ in coverages]
+    coverages: List[float] = []
+    risks: List[float] = []
+    if coverage_items:
+        # thresholds 从高到低，覆盖率随阈值降低而增大
+        thresholds = [i / 20.0 for i in range(0, 21)]
+        total = len(coverage_items)
+        for t in thresholds:
+            # 选择：未拒答且置信度 >= t
+            selected = [
+                item for item in coverage_items if (not item[1]) and item[0] >= t  # (conf, abstain, correct)
+            ]
+            if not selected:
+                coverages.append(0.0)
+                risks.append(0.0)
+                continue
+            coverage = len(selected) / total
+            err = sum(1 for _, _, correct in selected if not correct) / len(selected)
+            coverages.append(coverage)
+            risks.append(err)
     plt.figure()
     plt.plot(coverages, risks, marker="o")
     plt.xlabel("Coverage")
@@ -149,13 +270,38 @@ def main() -> None:
         f.write(f"vqa_cn,acc,{vqa_acc:.4f}\n")
         f.write(f"ocr_vqa,hit_rate,{ocr_hit:.4f}\n")
         f.write(f"ocr_vqa,avg_edit_distance,{ocr_ed:.4f}\n")
+        # OCR 证据命中率（预测 evidence 是否命中包含答案的 OCR token）
+        ocr_evi_rate = ocr_evi_hits / ocr_evi_total if ocr_evi_total > 0 else 0.0
+        f.write(f"ocr_vqa,evidence_hit_rate,{ocr_evi_rate:.4f}\n")
+
         f.write(f"chart_qa,em,{chart_em:.4f}\n")
         f.write(f"chart_qa,mape,{chart_mape:.4f}\n")
+        # 图表元素覆盖率（预测 evidence 是否命中与答案对应的图元）
+        chart_evi_rate = chart_evi_hits / chart_evi_total if chart_evi_total > 0 else 0.0
+        f.write(f"chart_qa,element_coverage,{chart_evi_rate:.4f}\n")
+
         f.write(f"answerability,ap,{ans_ap:.4f}\n")
+
+        # 逐数据集指标
+        for ds, preds_ds in vqa_pred_by_ds.items():
+            refs_ds = vqa_ref_by_ds[ds]
+            acc_ds = vqa_accuracy(preds_ds, refs_ds) if preds_ds else 0.0
+            f.write(f"vqa_cn[{ds}],acc,{acc_ds:.4f}\n")
+
+        for ds, preds_ds in ocr_pred_by_ds.items():
+            refs_ds = ocr_ref_by_ds[ds]
+            hit_ds, ed_ds = ocr_vqa_scores(preds_ds, refs_ds) if preds_ds else (0.0, 0.0)
+            f.write(f"ocr_vqa[{ds}],hit_rate,{hit_ds:.4f}\n")
+            f.write(f"ocr_vqa[{ds}],avg_edit_distance,{ed_ds:.4f}\n")
+
+        for ds, preds_ds in chart_pred_by_ds.items():
+            refs_ds = chart_ref_by_ds[ds]
+            em_ds, mape_ds = chart_scores(preds_ds, refs_ds) if preds_ds else (0.0, 0.0)
+            f.write(f"chart_qa[{ds}],em,{em_ds:.4f}\n")
+            f.write(f"chart_qa[{ds}],mape,{mape_ds:.4f}\n")
 
     logger.info("评测完成，结果已写入: %s 与 %s", csv_path, png_path)
 
 
 if __name__ == "__main__":
     main()
-

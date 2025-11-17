@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Iterable
 
 import torch
+from torch import nn
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import LambdaLR
 
 
-def create_optimizer(model: torch.nn.Module, train_cfg: Dict[str, Any]) -> AdamW:
+def create_optimizer(
+    model_or_params: torch.nn.Module | Iterable[torch.nn.Parameter],
+    train_cfg: Dict[str, Any],
+) -> AdamW:
     """基于训练配置创建 AdamW 优化器。
 
     主要参数：
@@ -18,11 +22,12 @@ def create_optimizer(model: torch.nn.Module, train_cfg: Dict[str, Any]) -> AdamW
     lr = float(train_cfg.get("lr", 1.0e-4))
     weight_decay = float(train_cfg.get("weight_decay", 0.01))
 
-    return AdamW(
-        model.parameters(),
-        lr=lr,
-        weight_decay=weight_decay,
-    )
+    if isinstance(model_or_params, nn.Module):
+        params = (p for p in model_or_params.parameters() if p.requires_grad)
+    else:
+        params = model_or_params
+
+    return AdamW(params, lr=lr, weight_decay=weight_decay)
 
 
 def create_scheduler(
@@ -56,4 +61,3 @@ def clip_gradients(model: torch.nn.Module, max_norm: float = 1.0) -> None:
     """对模型参数进行梯度裁剪。"""
 
     torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=max_norm)
-

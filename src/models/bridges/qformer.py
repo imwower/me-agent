@@ -6,6 +6,8 @@ from typing import Tuple
 import torch
 from torch import nn
 
+from src.models.utils.lora_adapter import LoRALinear
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,6 +31,9 @@ class SimpleQFormerBridge(nn.Module):
         vision_dim: int,
         hidden_dim: int = 512,
         num_query_tokens: int = 32,
+        use_lora: bool = False,
+        lora_r: int = 8,
+        lora_alpha: float = 16.0,
     ) -> None:
         super().__init__()
 
@@ -38,7 +43,22 @@ class SimpleQFormerBridge(nn.Module):
             torch.randn(num_query_tokens, hidden_dim) * 0.02
         )
 
-        self.vision_proj = nn.Linear(vision_dim, hidden_dim)
+        # 视觉投影层可以启用 LoRA，以便在不修改预训练编码器的情况下微调桥接层。
+        if use_lora:
+            self.vision_proj = LoRALinear(
+                in_features=vision_dim,
+                out_features=hidden_dim,
+                r=lora_r,
+                alpha=lora_alpha,
+            )
+            logger.info(
+                "SimpleQFormerBridge: 使用 LoRALinear 作为 vision_proj (r=%d, alpha=%.1f)",
+                lora_r,
+                lora_alpha,
+            )
+        else:
+            self.vision_proj = nn.Linear(vision_dim, hidden_dim)
+
         self.self_attn = nn.MultiheadAttention(
             embed_dim=hidden_dim,
             num_heads=8,
@@ -87,4 +107,3 @@ class SimpleQFormerBridge(nn.Module):
         ffn_out = self.ffn(out)
         out = self.norm2(out + ffn_out)
         return out
-
