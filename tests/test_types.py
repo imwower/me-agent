@@ -1,0 +1,123 @@
+import unittest
+from datetime import datetime, timezone
+
+from me_core.types import (
+    AgentEvent,
+    EventKind,
+    EventSource,
+    ToolCall,
+    ToolResult,
+)
+
+
+class AgentEventTypesTestCase(unittest.TestCase):
+    """AgentEvent / ToolCall / ToolResult 的基础类型与序列化测试。"""
+
+    def test_agent_event_to_from_dict_roundtrip(self) -> None:
+        """AgentEvent 的 to_dict / from_dict 应能互相还原关键信息。"""
+
+        payload = {"kind": "perception", "text": "你好，世界"}
+        event = AgentEvent.now(
+            event_type=EventKind.PERCEPTION.value,
+            payload=payload,
+            source=EventSource.HUMAN.value,
+            kind=EventKind.PERCEPTION,
+            trace_id="trace-1",
+        )
+
+        data = event.to_dict()
+        restored = AgentEvent.from_dict(data)
+
+        self.assertEqual(restored.event_type, event.event_type)
+        self.assertEqual(restored.payload, event.payload)
+        self.assertEqual(restored.source, event.source)
+        # kind 应保持一致
+        self.assertEqual(
+            restored.kind.value if restored.kind else None,
+            event.kind.value if event.kind else None,
+        )
+
+        # pretty 与 __str__ 不应抛出异常，且返回非空字符串
+        self.assertTrue(event.pretty())
+        self.assertTrue(str(event))
+
+    def test_agent_event_from_legacy_dict(self) -> None:
+        """from_dict 应兼容仅包含 timestamp / event_type / payload 的旧格式。"""
+
+        legacy = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "event_type": "task",
+            "payload": {"kind": "task", "task_type": "demo"},
+        }
+        event = AgentEvent.from_dict(legacy)
+
+        self.assertEqual(event.event_type, "task")
+        self.assertEqual(event.payload["task_type"], "demo")  # type: ignore[index]
+
+
+class ToolTypesTestCase(unittest.TestCase):
+    """ToolCall / ToolResult 的序列化与别名字段测试。"""
+
+    def test_tool_call_to_from_dict(self) -> None:
+        """ToolCall 的 to_dict / from_dict 能互相还原。"""
+
+        call = ToolCall(
+            tool_name="echo",
+            arguments={"text": "hello"},
+            call_id="call-1",
+        )
+
+        data = call.to_dict()
+        restored = ToolCall.from_dict(data)
+
+        self.assertEqual(restored.tool_name, "echo")
+        self.assertEqual(restored.arguments, {"text": "hello"})
+        self.assertEqual(restored.call_id, "call-1")
+        # 便捷别名字段也应工作正常
+        self.assertEqual(restored.id, restored.call_id)
+        self.assertEqual(restored.name, restored.tool_name)
+        self.assertEqual(restored.args, restored.arguments)
+
+        self.assertTrue(call.pretty())
+        self.assertTrue(str(call))
+
+    def test_tool_call_from_alt_field_names(self) -> None:
+        """from_dict 应兼容 name / args / id / created_at 等备选字段名。"""
+
+        data = {
+            "name": "time",
+            "args": {},
+            "id": "xyz",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        call = ToolCall.from_dict(data)
+
+        self.assertEqual(call.tool_name, "time")
+        self.assertEqual(call.call_id, "xyz")
+
+    def test_tool_result_to_from_dict(self) -> None:
+        """ToolResult 的 to_dict / from_dict 能互相还原。"""
+
+        result = ToolResult(
+            call_id="call-1",
+            success=True,
+            output={"value": 42},
+            error=None,
+            meta={"debug": True},
+        )
+
+        data = result.to_dict()
+        restored = ToolResult.from_dict(data)
+
+        self.assertEqual(restored.call_id, "call-1")
+        self.assertTrue(restored.success)
+        self.assertEqual(restored.output, {"value": 42})
+        self.assertEqual(restored.meta.get("debug"), True)
+
+        self.assertTrue(result.pretty())
+        self.assertTrue(str(result))
+
+
+if __name__ == "__main__":
+    unittest.main()
+

@@ -1,13 +1,9 @@
 """多模态感知（perception）相关桩实现。
 
-当前提供若干可替换的 EncoderStub：
-- TextEncoderStub
-- ImageEncoderStub
-- AudioEncoderStub
-- VideoEncoderStub
-
-以及一个简单的多模态编码辅助函数：
-- encode_multimodal：接收 MultiModalInput，返回各模态的向量表示。
+当前提供：
+- 若干可替换的 EncoderStub（Text/Image/Audio/Video）；
+- encode_multimodal：接收 MultiModalInput，返回各模态的向量表示；
+- BasePerception / TextPerception：感知接口与最简文本感知实现。
 """
 
 from __future__ import annotations
@@ -17,6 +13,7 @@ from typing import Dict, List
 
 from me_core.types import MultiModalInput
 
+from .base import BasePerception, TextPerception  # noqa: F401
 from .audio_encoder_stub import AudioEncoderStub  # noqa: F401
 from .image_encoder_stub import ImageEncoderStub  # noqa: F401
 from .processor import encode_to_event  # noqa: F401
@@ -26,6 +23,8 @@ from .video_encoder_stub import VideoEncoderStub  # noqa: F401
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "BasePerception",
+    "TextPerception",
     "TextEncoderStub",
     "ImageEncoderStub",
     "AudioEncoderStub",

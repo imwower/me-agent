@@ -14,39 +14,6 @@ from me_core.types import AgentEvent
 logger = logging.getLogger(__name__)
 
 
-def _event_to_dict(event: AgentEvent) -> Dict[str, Any]:
-    """将 AgentEvent 序列化为 JSON 友好的字典结构。"""
-
-    return {
-        "timestamp": event.timestamp.isoformat(),
-        "event_type": event.event_type,
-        "payload": event.payload,
-    }
-
-
-def _event_from_dict(data: Dict[str, Any]) -> AgentEvent:
-    """从字典反序列化为 AgentEvent。
-
-    为了兼容旧数据或异常数据，这里做了较为宽松的处理：
-        - 若时间解析失败，则使用“当前时间”兜底；
-        - 若缺失 event_type，则使用 "unknown"。
-    """
-
-    ts_raw = data.get("timestamp")
-    if isinstance(ts_raw, str):
-        try:
-            timestamp = datetime.fromisoformat(ts_raw)
-        except ValueError:
-            timestamp = datetime.now(timezone.utc)
-    else:
-        timestamp = datetime.now(timezone.utc)
-
-    event_type = str(data.get("event_type") or "unknown")
-    payload = data.get("payload")
-
-    return AgentEvent(timestamp=timestamp, event_type=event_type, payload=payload)
-
-
 @dataclass
 class StateStore:
     """使用本地 JSON 文件持久化智能体核心状态。
@@ -102,7 +69,7 @@ class StateStore:
         for item in raw_events:
             if isinstance(item, dict):
                 try:
-                    restored_events.append(_event_from_dict(item))
+                    restored_events.append(AgentEvent.from_dict(item))
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("反序列化事件失败，将跳过该条记录: %s", exc)
         self.events = restored_events
@@ -119,7 +86,7 @@ class StateStore:
             "self_state": self.self_state.to_dict(),
             "drives": self.drives.as_dict(),
             "event_summaries": list(self.event_summaries),
-            "events": [_event_to_dict(e) for e in self.events],
+            "events": [e.to_dict() for e in self.events],
             "knowledge_base": list(self.knowledge_base),
         }
 

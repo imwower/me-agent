@@ -1,16 +1,19 @@
 """对话（dialogue）相关模块。
 
-当前仅提供一个简单的对话规划器与生成桩，用于：
-- 根据驱动力与自我总结，决定是否主动发起对话；
-- 生成一段中文自述或求助信息。
+当前提供：
+- DialoguePlanner / generate_message：基于驱动力的主动发言规划与生成桩；
+- BaseDialoguePolicy / RuleBasedDialoguePolicy：面向 Agent 的对话策略接口与实现。
 """
 
 from .planner import DialoguePlanner, InitiativeDecision  # noqa: F401
 from .generator_stub import generate_message  # noqa: F401
+from .policy import BaseDialoguePolicy, RuleBasedDialoguePolicy  # noqa: F401
 
 __all__ = [
     "DialoguePlanner",
     "InitiativeDecision",
     "generate_message",
+    "BaseDialoguePolicy",
+    "RuleBasedDialoguePolicy",
 ]
 

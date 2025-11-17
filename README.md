@@ -8,7 +8,11 @@ me-agent 是一个以“自我驱动的智能体”为核心隐喻的原型系�
 - 如何在内在驱动力的驱动下，持续地“想 / 要 / 做”；
 - 如何通过工具、对话、多模态能力，在真实环境中执行行动并反思。
 
-当前仓库只包含最基础的核心类型定义与目录结构，未来会在此之上逐步构建完整系统。
+当前仓库已经实现了一套以事件流为核心的最小可运行原型，包括：
+- 统一的事件与工具调用类型定义（`AgentEvent` / `ToolCall` / `ToolResult`）；
+- 简单的事件流与事件历史工具（`EventStream` / `EventHistory`）；
+- 轻量的世界模型、自我模型、驱动力与学习模块；
+- 一个可运行的 `SimpleAgent` 循环及命令行 demo 脚本。
 
 
 ## 整体架构概述（文字版）
@@ -89,14 +93,62 @@ me-agent 是一个以“自我驱动的智能体”为核心隐喻的原型系�
 
 ## 当前代码结构概览
 
-当前仓库仅包含核心基础结构，尽量保持简单、可扩展：
+当前仓库提供了一套围绕“事件流 + 工具调用”的基础实现，尽量保持简单、可扩展：
 
 - `me_core/`
-  - `__init__.py`：核心包初始化，集中导出基础类型。
-  - `types.py`：核心通用数据结构，例如 `AgentEvent`、`ToolCall`、`ToolResult` 等。
+  - `types.py`：核心通用数据结构，例如 `AgentEvent`、`ToolCall`、`ToolResult` 等；
+  - `event_stream.py`：内存中的事件流与事件历史工具；
+  - `perception/`：多模态感知桩实现，`TextPerception` 用于将文本输入转为感知事件；
+  - `world_model/`：`SimpleWorldModel` 基于事件历史做简单统计；
+  - `self_model/`：`SelfState` + `SimpleSelfModel`，用于描述与总结“我是谁 / 我在做什么”；
+  - `drives/`：驱动力向量与更新规则，以及基于最近事件给出 `Intent` 的 `SimpleDriveSystem`；
+  - `tools/`：工具元信息、注册表以及 `EchoTool` / `TimeTool` 等简单工具；
+  - `learning/`：`SimpleLearner` / `LearningManager`，用于观察事件并进行原型级学习；
+  - `dialogue/`：对话规划器与 `RuleBasedDialoguePolicy`，将意图转为中文自然语言；
+  - `agent/`：`StateStore` / 旧版 `run_once` 主循环，以及新的 `SimpleAgent` Agent 框架。
+- `scripts/`
+  - `demo_cli_agent.py`：基于 `SimpleAgent` 的命令行 demo（推荐从这里体验最小闭环）；
+  - 其他脚本：演示自我学习循环、驱动力调整和状态查看等。
 - `tests/`
-  - `__init__.py`：测试包初始化，后续会在此目录下增加单元测试与集成测试。
+  - 覆盖类型定义、感知、驱动力、学习模块以及 `SimpleAgent` 单步行为等。
 - `requirements.txt`：当前为空，仅作占位，强调仅依赖 Python 标准库。
+
+
+## 快速开始
+
+### 准备环境
+
+- 确保使用 Python **3.10+**；
+- 不需要安装任何三方依赖（`requirements.txt` 为空）。
+
+在仓库根目录下可以先运行单元测试，确认环境正常：
+
+```bash
+python -m unittest
+```
+
+### 运行最小对话 demo
+
+在仓库根目录执行：
+
+```bash
+python scripts/demo_cli_agent.py
+```
+
+你可以在命令行中与 agent 进行多轮简单对话，例如：
+
+- 输入任意句子，观察 agent 如何用“我想 / 我要 / 我做”的风格回应；
+- 输入包含“时间”或 `time` 的句子（如“现在几点了？”），agent 会通过 `TimeTool`
+  调用内部时间工具，并在回复中体现这一点。
+
+内部大致链路为：
+
+1. 文本输入 → `TextPerception` → 生成 `AgentEvent`（感知事件）；
+2. 事件记录到 `EventStream`，同时更新 `SimpleWorldModel` 与 `SimpleSelfModel`；
+3. `SimpleDriveSystem` 基于最近事件给出一个 `Intent`（回复 / 调用工具 / 保持安静等）；
+4. 如需调用工具，则通过 `ToolCall` / `ToolResult` 连接 `EchoTool` / `TimeTool`；
+5. `RuleBasedDialoguePolicy` 结合 Intent 与自我描述生成中文回复；
+6. `SimpleLearner` 观察本轮事件，为后续扩展学习逻辑预留接口。
 
 
 ## 开发环境与约定
@@ -115,4 +167,3 @@ me-agent 是一个以“自我驱动的智能体”为核心隐喻的原型系�
 - 更详细的模块间交互图；
 - 典型运行流程示例（例如一个“我想 → 我要 → 我做”的完整回合）；
 - 与外部系统集成的示例（CLI / Web / 其他 agent 框架）。
-
