@@ -5,7 +5,7 @@ model:
     embed_dim: 512
 
   text_decoder:
-    model_name: "IDEA-CCNL/Wenzhong2.0-GPT2-110M"
+    model_name: "uer/gpt2-chinese-cluecorpussmall"
     max_length: 64
 
   bridge:
@@ -34,4 +34,3 @@ training:
   batch_size: 4
   mixed_precision: "fp16"   # 可选: "fp16" / "bf16" / "no"
   device: "auto"            # auto/mps/cpu
-
