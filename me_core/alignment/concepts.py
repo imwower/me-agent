@@ -39,6 +39,31 @@ class ConceptNode:
     examples: List[Dict[str, Any]] = field(default_factory=list)
     meta: Dict[str, Any] = field(default_factory=dict)
 
+    def to_dict(self) -> Dict[str, Any]:
+        """将 ConceptNode 转换为可序列化字典。"""
+
+        return {
+            "id": str(self.id),
+            "name": self.name,
+            "aliases": list(self.aliases),
+            "centroid": list(self.centroid),
+            "examples": list(self.examples),
+            "meta": dict(self.meta),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ConceptNode":
+        """从字典恢复 ConceptNode。"""
+
+        return cls(
+            id=ConceptId(str(data.get("id") or "")),
+            name=str(data.get("name") or ""),
+            centroid=list(data.get("centroid") or []),
+            aliases=list(data.get("aliases") or []),
+            examples=list(data.get("examples") or []),
+            meta=dict(data.get("meta") or {}),
+        )
+
 
 class ConceptSpace:
     """简单的概念空间实现。
@@ -154,6 +179,44 @@ class ConceptSpace:
         key = name.strip().lower()
         cid = self._alias_index.get(key)
         return self._nodes.get(cid) if cid is not None else None
+
+    # 序列化 / 反序列化 -----------------------------------------------------------
+
+    def to_dict(self) -> Dict[str, Any]:
+        """将整个概念空间转换为可序列化字典。"""
+
+        return {
+            "similarity_threshold": self.similarity_threshold,
+            "concepts": [node.to_dict() for node in self.all_concepts()],
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ConceptSpace":
+        """从字典构造 ConceptSpace 实例。"""
+
+        space = cls(similarity_threshold=float(data.get("similarity_threshold", 0.6)))
+        concepts_raw = data.get("concepts") or []
+        for item in concepts_raw:
+            node = ConceptNode.from_dict(item)
+            cid = node.id
+            space._nodes[cid] = node
+            space._order.append(cid)
+            for alias in node.aliases:
+                key = alias.strip().lower()
+                if key:
+                    space._alias_index.setdefault(key, cid)
+        return space
+
+    def register_alias(self, node: ConceptNode, alias: str) -> None:
+        """为指定概念注册一个新的别名，并更新别名索引。"""
+
+        alias = alias.strip()
+        if not alias:
+            return
+        if alias not in node.aliases:
+            node.aliases.append(alias)
+        key = alias.lower()
+        self._alias_index.setdefault(key, node.id)
 
 
 __all__ = ["ConceptId", "ConceptNode", "ConceptSpace"]
