@@ -34,3 +34,6 @@ training:
   batch_size: 4
   mixed_precision: "fp16"   # 可选: "fp16" / "bf16" / "no"
   device: "auto"            # auto/mps/cpu
+  # 单任务 VQA 训练的 checkpoint 配置（可选）
+  checkpoint_dir: "outputs/vqa_cn_checkpoints"
+  checkpoint_name: "vqa_cn_last.pt"

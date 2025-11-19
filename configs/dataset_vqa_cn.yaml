@@ -5,4 +5,4 @@ dataset:
       split: "train"
       sample_ratio: 1.0
   cache_dir: "data/cache"
-  max_samples: 1000
+  max_samples: 100000

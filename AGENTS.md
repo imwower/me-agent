@@ -4,7 +4,7 @@
 
 - `me_core/`: core agent loop, perception, drives, self/world models, tools, dialogue, learning.
 - `src/`: multimodal training, data modules, models, inference and evaluation utilities.
-- `scripts/`: CLI demos, data download/prepare scripts, training and evaluation entrypoints.
+- `scripts/`: CLI demos、数据准备和其他辅助脚本。
 - `configs/`: YAML configs for datasets, models, and training runs.
 - `tests/`: unit tests for `me_core` and key `src` modules.
 - `data/`, `envs/`, `env/`: local data prep helpers and example environments (not committed to CI).
@@ -14,7 +14,7 @@
 - Run full test suite: `python -m unittest`.
 - Run a single test module: `python -m unittest tests.test_agent_core`.
 - CLI demo (recommended first entry): `python scripts/demo_cli_agent.py`.
-- Other useful scripts: `python scripts/run_agent_demo.py`, `python scripts/run_agent_interactive.py`, `bash scripts/train_vqa_cn.sh` (and similar `train_*` / `eval_*` scripts).
+- Other useful scripts: `python scripts/run_agent_demo.py`, `python scripts/run_agent_interactive.py`.
 
 ## Coding Style & Naming Conventions
 

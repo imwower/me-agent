@@ -1,16 +1,7 @@
-"""推理与统一 JSON 输出模块。
+"""推理与统一 JSON 输出模块（当前仅保留 OCR 证据构建）。"""
 
-当前提供：
-- predictor.predict_single: 面向外部调用的主推理接口；
-- evidence / generate: 证据检索与两段式生成的内部组件。
-"""
+from __future__ import annotations
 
-from .predictor import predict_single  # noqa: F401
-from .evidence import build_evidence_for_image_only  # noqa: F401
-from .generate import evidence_first_generate  # noqa: F401
+from .evidence import build_evidence_for_image_only, collect_ocr_evidence, build_evidence_from_sample
 
-__all__ = [
-    "predict_single",
-    "build_evidence_for_image_only",
-    "evidence_first_generate",
-]
+__all__ = ["build_evidence_for_image_only", "collect_ocr_evidence", "build_evidence_from_sample"]
