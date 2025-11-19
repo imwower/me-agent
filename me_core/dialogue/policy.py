@@ -52,6 +52,7 @@ class RuleBasedDialoguePolicy(BaseDialoguePolicy):
             return None
 
         self_desc = self_model.describe()
+        state = self_model.get_state()
 
         # 从最近事件中抽取一条最新的用户文本，便于“复述用户说了什么”
         last_user_text = ""
@@ -68,6 +69,23 @@ class RuleBasedDialoguePolicy(BaseDialoguePolicy):
 
         if last_user_text:
             parts.append(f"你刚才说：{last_user_text}")
+
+        # 针对“你会不会看图/理解图片”等问题给出更具象的回答
+        lower = last_user_text.lower()
+        if any(
+            kw in lower
+            for kw in ("看图", "看图片", "理解图片", "图像", "图片", "image", "picture")
+        ):
+            if "image_perception" in state.capability_tags:
+                parts.append(
+                    "【我想】目前我已经具备基础的图像感知与概念对齐能力，"
+                    "可以接收图片路径并在内部的概念空间中为它建立锚点（当前仍使用占位式向量）。"
+                )
+            else:
+                parts.append(
+                    "【我想】目前我的主要能力还是文本理解，对图片只能记录路径和少量元信息，"
+                    "还没有真正的视觉理解能力，但架构上已经为未来扩展预留了位置。"
+                )
 
         if intent.explanation:
             parts.append(f"【我想】{intent.explanation}")
@@ -86,4 +104,3 @@ class RuleBasedDialoguePolicy(BaseDialoguePolicy):
         parts.append(f"【我做】{self_desc}")
 
         return " ".join(parts)
-

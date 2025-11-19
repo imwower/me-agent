@@ -79,11 +79,21 @@ def update_from_event(state: SelfState, event: AgentEvent) -> SelfState:
                     new_state.limitations.append(error_msg)
             new_state.add_activity(f"任务失败: {task_type}")
 
-    # 感知事件：记录最近感知到的信息，便于自我总结中体现“最近在看什么”
+    # 感知事件：记录最近感知到的信息与模态，便于自我总结中体现“最近在看什么”
     if kind == "perception":
         text_snippet = ""
         raw = payload.get("raw") if isinstance(payload, dict) else None
         if isinstance(raw, dict):
+            # 记录已接触模态与能力标签
+            if event.modality:
+                new_state.modalities_seen.add(event.modality)
+                if event.modality == "text":
+                    new_state.capability_tags.add("text_perception")
+                elif event.modality == "image":
+                    new_state.capability_tags.add("image_perception")
+                elif event.modality == "audio":
+                    new_state.capability_tags.add("audio_perception")
+
             text_value = raw.get("text")
             if isinstance(text_value, str) and text_value:
                 # 只截取前若干字符，避免活动描述过长

@@ -133,6 +133,9 @@ def summarize_self(state: SelfState) -> Dict[str, str]:
     who_am_i = f"我是 {state.identity}。"
 
     capability_text = _format_capabilities(state.capabilities)
+    if state.capability_tags:
+        tags = "、".join(sorted(state.capability_tags))
+        capability_text += f"；我目前具备的能力标签包括：{tags}。"
     # 将关注主题与最近活动也融入“我能做什么”的描述，形成更具时间感的自述
     if state.focus_topics:
         topics = "、".join(state.focus_topics[:5])
@@ -145,6 +148,10 @@ def summarize_self(state: SelfState) -> Dict[str, str]:
     perception_text = _format_recent_perceptions(state.recent_activities)
     if perception_text:
         capability_text += f" {perception_text}"
+
+    if state.modalities_seen:
+        mods = "、".join(sorted(state.modalities_seen))
+        capability_text += f" 我已经实际接触过的模态包括：{mods}。"
 
     trend_text = _format_capability_trend(state.capability_trend)
     if trend_text:

@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from me_core.event_stream import EventHistory
 from me_core.types import AgentEvent, EventKind
+
+if TYPE_CHECKING:  # 仅用于类型检查，避免运行时循环依赖
+    from me_core.alignment.concepts import ConceptNode
 
 
 class BaseWorldModel(ABC):
@@ -41,6 +44,8 @@ class SimpleWorldModel(BaseWorldModel):
         default_factory=lambda: EventHistory(max_events=200)
     )
     tool_stats: Dict[str, Dict[str, int]] = field(default_factory=dict)
+    # 概念出现频次统计：concept_id -> {"name": str, "count": int}
+    concept_stats: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
     def update(self, events: List[AgentEvent]) -> None:
         """将新事件写入历史，并更新工具统计。"""
@@ -101,5 +106,28 @@ class SimpleWorldModel(BaseWorldModel):
         return {
             "events": events_summary,
             "tools": tools_summary,
+            "concepts": self.concept_stats,
         }
 
+    # 新增：概念相关观测接口 --------------------------------------------------------
+
+    def observe_event_concept(
+        self,
+        event: AgentEvent,
+        concept: Optional["ConceptNode"],
+    ) -> None:
+        """记录某个事件在概念空间中的对齐结果。
+
+        说明：
+            - 不负责对齐本身，仅消费对齐后的 ConceptNode；
+            - 当前实现只做简单计数统计，后续可扩展为更复杂的世界知识结构。
+        """
+
+        if concept is None:
+            return
+
+        stats = self.concept_stats.setdefault(
+            str(concept.id),
+            {"name": concept.name, "count": 0},
+        )
+        stats["count"] = int(stats.get("count", 0)) + 1

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, Optional, Type, TypeVar
+from typing import Any, Dict, Optional, Type, TypeVar, NewType, Set
 
 # 为了在类型层集中暴露核心状态结构，这里仅定义/聚合“轻量数据结构”。
 # 复杂的更新逻辑仍然放在各自子模块中（如 self_model / drives 等），
@@ -95,6 +95,41 @@ class MultiModalInput:
     video_meta: Optional[JsonDict] = None
 
 
+# 轻量级多模态引用结构 ----------------------------------------------------------------
+
+ImageId = NewType("ImageId", str)
+AudioId = NewType("AudioId", str)
+
+
+@dataclass(slots=True)
+class ImageRef:
+    """图像引用的统一结构。
+
+    说明：
+        - path: 本地路径或 URL（由上层约定），不强制要求一定可直接打开；
+        - width/height: 若已知则填入，否则可为 None；
+        - meta: 其他元信息，例如来源、文件大小、hash 等。
+    """
+
+    path: str
+    width: Optional[int] = None
+    height: Optional[int] = None
+    meta: JsonDict = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class AudioRef:
+    """音频引用的统一结构。
+
+    当前仅记录基本的文件路径与时长/采样率信息，具体波形或特征由上层模块负责。
+    """
+
+    path: str
+    duration: Optional[float] = None
+    sample_rate: Optional[int] = None
+    meta: JsonDict = field(default_factory=dict)
+
+
 @dataclass(slots=True)
 class AgentEvent:
     """描述一次智能体的行为或感知事件。
@@ -120,6 +155,11 @@ class AgentEvent:
         trace_id: 追踪同一条思考链路的 id，便于未来在“多轮推理/多智能体协作”
                   场景中进行调试与可视化。
         meta: 额外元信息（例如 agent_id、population_id 等），方便未来扩展。
+
+    为支持多模态对齐与概念空间，新增字段（保持向后兼容）：
+        modality: 当前事件主模态，例如 "text" / "image" / "audio" / "mixed"；
+        embedding: 可选的向量表示（通常由对齐模块填充），用于在概念空间中检索；
+        tags: 任意标签集合，便于基于标签的检索与学习。
     """
 
     timestamp: datetime
@@ -130,6 +170,9 @@ class AgentEvent:
     kind: Optional[EventKind] = None
     trace_id: Optional[str] = None
     meta: JsonDict = field(default_factory=dict)
+    modality: Optional[str] = None
+    embedding: Optional[list[float]] = None
+    tags: Set[str] = field(default_factory=set)
 
     @staticmethod
     def now(
@@ -172,6 +215,9 @@ class AgentEvent:
             "kind": self.kind.value if isinstance(self.kind, EventKind) else self.kind,
             "trace_id": self.trace_id,
             "meta": dict(self.meta) if self.meta is not None else {},
+            "modality": self.modality,
+            "embedding": list(self.embedding) if isinstance(self.embedding, list) else self.embedding,
+            "tags": sorted(self.tags),
         }
 
     @classmethod
@@ -206,6 +252,12 @@ class AgentEvent:
         else:
             kind = None
 
+        tags_raw = data.get("tags") or []
+        if isinstance(tags_raw, (list, set, tuple)):
+            tags_set: Set[str] = {str(t) for t in tags_raw}
+        else:
+            tags_set = set()
+
         return cls(
             timestamp=timestamp,
             event_type=event_type,
@@ -215,6 +267,9 @@ class AgentEvent:
             kind=kind,
             trace_id=data.get("trace_id"),
             meta=dict(data.get("meta") or {}),
+            modality=data.get("modality"),
+            embedding=data.get("embedding"),
+            tags=tags_set,
         )
 
     def pretty(self) -> str:

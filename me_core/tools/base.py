@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict
 
-from me_core.types import ToolCall, ToolResult
+from me_core.types import ToolCall, ToolResult, ImageRef
 
 
 class BaseTool(ABC):
@@ -83,3 +83,58 @@ class TimeTool(BaseTool):
             meta={"kind": "time"},
         )
 
+
+@dataclass(slots=True)
+class MultimodalQATool(BaseTool):
+    """多模态问答工具桩实现。
+
+    设计意图：
+        - 作为“图像 + 文本问题 -> 文本回答”的统一封装；
+        - 当前版本不调用真实多模态模型，仅回显简单描述；
+        - 未来可在独立扩展模块中接入 CLIP/多模态 LLM 等，再通过同名接口挂载。
+    """
+
+    name: str = "multimodal_qa"
+
+    def call(self, call: ToolCall) -> ToolResult:
+        image_path = None
+        question = ""
+
+        args = call.args
+        img_raw = args.get("image")
+        if isinstance(img_raw, dict) and img_raw.get("path"):
+            image_path = str(img_raw.get("path"))
+        elif isinstance(img_raw, str):
+            image_path = img_raw
+
+        if isinstance(args.get("question"), str):
+            question = args["question"]
+
+        # 当前仅生成占位式回答，说明架构路线
+        if image_path and question:
+            answer = (
+                f"这是一个多模态问答占位工具。我收到的问题是「{question}」，"
+                f"并知道你提供了一张图片（路径：{image_path}）。"
+                "在未来接入真实多模态模型后，我会尝试基于图片内容和问题生成更准确的回答。"
+            )
+        elif question:
+            answer = (
+                f"多模态问答工具目前只收到文本问题「{question}」，"
+                "但没有图片信息。未来可以同时提供图片路径与问题，让我尝试做基于图片的回答。"
+            )
+        else:
+            answer = "多模态问答工具当前未收到有效的图片或问题输入。"
+
+        output: Dict[str, object] = {
+            "tool_name": self.name,
+            "answer": answer,
+            "image_path": image_path,
+            "question": question,
+        }
+        return ToolResult(
+            call_id=call.call_id,
+            success=True,
+            output=output,
+            error=None,
+            meta={"kind": "multimodal_qa"},
+        )

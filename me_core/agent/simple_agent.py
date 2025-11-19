@@ -6,6 +6,8 @@ from typing import Any, Dict, Optional
 from me_core.event_stream import EventStream
 from me_core.types import AgentEvent, EventKind, ToolCall, ToolResult
 
+from me_core.alignment.aligner import MultimodalAligner
+
 from ..dialogue import BaseDialoguePolicy
 from ..drives import BaseDriveSystem, Intent
 from ..learning import BaseLearner
@@ -83,6 +85,14 @@ class SimpleAgent(BaseAgent):
     last_intent: Optional[Intent] = field(default=None, init=False)
     last_tool_result: Optional[ToolResult] = field(default=None, init=False)
 
+    # 多模态对齐器（默认使用 DummyEmbeddingBackend + 内部 ConceptSpace）
+    aligner: Optional[MultimodalAligner] = field(default=None, init=False)
+
+    def __post_init__(self) -> None:
+        # 为保持向后兼容，仅在未显式注入 aligner 时创建默认对齐器。
+        if self.aligner is None:
+            self.aligner = MultimodalAligner.with_dummy_backend()
+
     def _append_events(self, *events: AgentEvent) -> None:
         """将事件写入事件流并更新 world_model / self_model。"""
 
@@ -93,6 +103,21 @@ class SimpleAgent(BaseAgent):
             e.meta.setdefault("agent_id", self.agent_id)
             if self.population_id is not None:
                 e.meta.setdefault("population_id", self.population_id)
+            # 在写入事件流之前，尝试执行多模态对齐，并将结果反馈给世界模型
+            if self.aligner is not None:
+                try:
+                    if (
+                        e.kind == EventKind.PERCEPTION
+                        or e.event_type == EventKind.PERCEPTION.value
+                    ):
+                        concept = self.aligner.align_event(e)
+                        # SimpleWorldModel 提供 observe_event_concept，可选调用
+                        observer = getattr(self.world_model, "observe_event_concept", None)
+                        if concept is not None and callable(observer):
+                            observer(e, concept)  # type: ignore[misc]
+                except Exception:
+                    # 对齐失败不应影响主体流程，记录后忽略
+                    pass
             self.event_stream.append_event(e)
             self.event_stream.log_event(e)
         self.world_model.update(list(events))
@@ -201,4 +226,3 @@ class SimpleAgent(BaseAgent):
             print("[对话] 本轮选择保持沉默。")  # noqa: T201
 
         return reply
-

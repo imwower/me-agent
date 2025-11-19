@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
-from typing import Any, Dict, List, Mapping
+from typing import Any, Dict, List, Mapping, Optional, Set
 
 
 @dataclass(slots=True)
@@ -25,6 +25,10 @@ class SelfState:
     needs: List[str] = field(default_factory=list)
     # 记录最近一次聚合统计后，各能力相对于之前的变化趋势：能力名称 -> Δ值
     capability_trend: Dict[str, float] = field(default_factory=dict)
+    # 与多模态/概念空间相关的自我认知字段
+    self_concept_id: Optional[str] = None
+    capability_tags: Set[str] = field(default_factory=set)
+    modalities_seen: Set[str] = field(default_factory=set)
 
     def add_activity(self, desc: str, max_len: int = 20) -> None:
         """追加一条活动摘要，并在超出长度时裁剪旧的记录。
@@ -63,6 +67,9 @@ class SelfState:
             recent_activities=list(data.get("recent_activities", [])) or [],
             needs=list(data.get("needs", [])) or [],
             capability_trend=dict(data.get("capability_trend", {})) or {},
+            self_concept_id=data.get("self_concept_id"),
+            capability_tags=set(data.get("capability_tags", []) or []),
+            modalities_seen=set(data.get("modalities_seen", []) or []),
         )
 
 

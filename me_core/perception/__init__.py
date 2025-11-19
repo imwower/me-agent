@@ -13,24 +13,30 @@ from typing import Dict, List
 
 from me_core.types import MultiModalInput
 
-from .base import BasePerception, TextPerception  # noqa: F401
+from .base import BasePerception, TextPerception, MultiModalPerception  # noqa: F401
 from .audio_encoder_stub import AudioEncoderStub  # noqa: F401
 from .image_encoder_stub import ImageEncoderStub  # noqa: F401
 from .processor import encode_to_event  # noqa: F401
 from .text_encoder_stub import TextEncoderStub  # noqa: F401
 from .video_encoder_stub import VideoEncoderStub  # noqa: F401
+from .image_perception import ImagePerception  # noqa: F401
+from .audio_perception import AudioPerception  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
     "BasePerception",
     "TextPerception",
+    "MultiModalPerception",
+    "ImagePerception",
+    "AudioPerception",
     "TextEncoderStub",
     "ImageEncoderStub",
     "AudioEncoderStub",
     "VideoEncoderStub",
     "encode_multimodal",
     "encode_to_event",
+    "create_default_perception_pipeline",
 ]
 
 
@@ -64,3 +70,14 @@ def encode_multimodal(input_data: MultiModalInput) -> Dict[str, List[float]]:
 
     logger.info("多模态编码结果: %s", results)
     return results
+
+
+def create_default_perception_pipeline() -> BasePerception:
+    """构造一个默认的多模态感知流水线。
+
+    当前实现：
+        - 使用 MultiModalPerception，在传入 str 时退化为 TextPerception；
+        - 后续可扩展为根据输入类型自动分派到 ImagePerception / AudioPerception 等。
+    """
+
+    return MultiModalPerception()
