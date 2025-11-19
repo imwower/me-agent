@@ -167,3 +167,61 @@ python scripts/demo_cli_agent.py
 - 更详细的模块间交互图；
 - 典型运行流程示例（例如一个“我想 → 我要 → 我做”的完整回合）；
 - 与外部系统集成的示例（CLI / Web / 其他 agent 框架）。
+
+
+## 基于本地语料的字符级语言模型（实验性）
+
+> 说明：本小节完全基于本地语料和 PyTorch，不依赖 Hugging Face。仅作为“使用大规模中文语料做简单语言建模”的实验性示例，不影响核心 agent 功能。
+
+### 1. 准备本地语料
+
+1）将从 `brightmart/nlp_chinese_corpus` 下载的压缩包放到 `data/` 目录：
+
+- `data/wiki_zh_2019.zip`
+- `data/translation2019zh.zip`
+
+2）运行清洗脚本，将原始语料转换为预训练友好的纯文本格式：
+
+```bash
+python data/prepare_nlp_chinese_corpus.py
+```
+
+运行后会生成：
+
+- `data/wiki_zh_2019/wiki_zh_sentences.txt`：每句话一行，文档间空行；
+- `data/translation2019zh/translation2019zh_zh.txt`：每行一个中文句子；
+- `data/translation2019zh/translation2019zh_en.txt`：每行一个英文句子。
+
+### 2. 训练字符级语言模型
+
+在项目根目录执行：
+
+```bash
+python scripts/train_char_lm_nlp_corpus.py \
+  --num-steps 2000 \
+  --batch-size 64 \
+  --block-size 128 \
+  --max-chars-per-file 2000000
+```
+
+脚本会：
+
+- 从 `wiki_zh_sentences.txt` 和 `translation2019zh_zh.txt` 加载中文文本；
+- 构建字符级词表并训练一个简单的 LSTM 语言模型；
+- 定期将 checkpoint 与词表保存到：
+  - `outputs/char_lm_nlp_corpus/char_lm_last.pt`
+  - `outputs/char_lm_nlp_corpus/vocab.json`
+
+### 3. 交互式生成 Demo
+
+训练完成后，可以启动一个简单的字符级续写 Demo：
+
+```bash
+python scripts/demo_char_lm_generate.py
+```
+
+进入后：
+
+- 输入任意中文前缀，例如：`经济学是一门研究`
+- 模型会基于训练好的字符级语言模型继续生成后续文本；
+- 输入 `exit` / `quit` / `q` 或按 `Ctrl+C` / `Ctrl+D` 退出。
