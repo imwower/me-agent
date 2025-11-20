@@ -76,7 +76,7 @@ def main() -> None:
     parser.add_argument("--epochs", type=int, default=1, help="训练轮数。")
     parser.add_argument("--batch-size", type=int, default=2, help="每卡批大小。")
     parser.add_argument("--lr", type=float, default=5e-5, help="学习率。")
-    parser.add_argument("--max-samples", type=int, default=2000, help="可选：截取前 N 条样本，加速演示。")
+    parser.add_argument("--max-samples", type=int, default=20000, help="可选：截取前 N 条样本，加速演示。")
     parser.add_argument("--fp16", action="store_true", help="启用 FP16 训练（需 GPU 支持）。")
     args = parser.parse_args()
 
