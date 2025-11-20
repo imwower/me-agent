@@ -15,4 +15,4 @@
 
 说明：
 - 核心层依赖保持标准库，`DummyEmbeddingBackend` 为占位；真实多模态模型接入需在外部扩展。
-- char-LM、CIFAR-100 脚本与核心 Agent 解耦，仅作实验示例。***
+- char-LM、CIFAR-100 脚本与核心 Agent 解耦，仅作实验示例。

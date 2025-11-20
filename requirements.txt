@@ -1,5 +1,2 @@
-# 核心模块不依赖第三方库，以下为可选脚本依赖：
-modelscope>=1.9.0
-transformers>=4.41.0
-datasets>=2.16.0
-accelerate>=0.27.0
+# 核心层仅依赖 Python 标准库。
+# 如需运行外部脚本（例如基于 transformers 的训练），请自行按需安装对应三方包。
