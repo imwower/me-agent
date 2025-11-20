@@ -128,6 +128,12 @@ class SimpleWorldModel(BaseWorldModel):
 
         stats = self.concept_stats.setdefault(
             str(concept.id),
-            {"name": concept.name, "count": 0},
+            {"name": concept.name, "count": 0, "modalities": {}, "last_seen": None},
         )
         stats["count"] = int(stats.get("count", 0)) + 1
+        # 记录模态分布，便于“多模态覆盖”驱动使用
+        modality = event.modality or "unknown"
+        mods: Dict[str, int] = stats.get("modalities") or {}
+        mods[str(modality)] = int(mods.get(str(modality), 0)) + 1
+        stats["modalities"] = mods
+        stats["last_seen"] = event.timestamp.isoformat()

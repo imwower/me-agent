@@ -129,6 +129,33 @@ class SimpleDriveSystem(BaseDriveSystem):
                 extra={"reason": "recent_human_input"},
             )
 
+        # 1.5) 若最近未收到用户输入，但概念空间存在“单一模态、重复出现”的概念，
+        #      触发好奇心，引导用户提供更多模态（例如图片或文字）。
+        concept_stats = getattr(world_model, "concept_stats", {}) or {}
+        curious_target = None
+        for cid, stats in concept_stats.items():
+            modalities = stats.get("modalities") or {}
+            if len(modalities) <= 1 and int(stats.get("count", 0)) >= 2:
+                curious_target = (cid, stats)
+                break
+
+        if curious_target is not None:
+            cid, stats = curious_target
+            name = stats.get("name") or cid
+            explanation = (
+                f"概念「{name}」已多次出现但只有单一模态，希望获得更多相关信息。"
+            )
+            return Intent(
+                kind="reply",
+                target_tool=None,
+                explanation=explanation,
+                extra={
+                    "reason": "curiosity_multimodal",
+                    "concept_id": cid,
+                    "concept_name": name,
+                },
+            )
+
         # 2) 没有任何事件：说明智能体还未真正启动，保持安静
         if not recent_events:
             return Intent(

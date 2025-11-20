@@ -91,7 +91,7 @@ class SimpleAgent(BaseAgent):
     def __post_init__(self) -> None:
         # 为保持向后兼容，仅在未显式注入 aligner 时创建默认对齐器。
         if self.aligner is None:
-            self.aligner = MultimodalAligner.with_dummy_backend()
+            self.aligner = MultimodalAligner.with_auto_backend()
 
     def _append_events(self, *events: AgentEvent) -> None:
         """将事件写入事件流并更新 world_model / self_model。"""

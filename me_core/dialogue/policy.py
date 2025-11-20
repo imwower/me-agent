@@ -70,6 +70,14 @@ class RuleBasedDialoguePolicy(BaseDialoguePolicy):
         if last_user_text:
             parts.append(f"你刚才说：{last_user_text}")
 
+        # 针对“好奇/多模态覆盖”意图，主动提出需求
+        if intent.extra.get("reason") == "curiosity_multimodal":
+            target = intent.extra.get("concept_name") or intent.extra.get("concept_id") or "这个概念"
+            parts.append(
+                f"【我想】最近反复遇到「{target}」但只有单一模态信息。"
+                "能否提供相关的图片或更多描述，帮我丰富理解？"
+            )
+
         # 针对“你会不会看图/理解图片”等问题给出更具象的回答
         lower = last_user_text.lower()
         if any(

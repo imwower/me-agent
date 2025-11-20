@@ -46,9 +46,25 @@ class SimpleLearner(BaseLearner):
     """
 
     observed_event_count: int = 0
+    concept_modalities: Dict[str, set[str]] = None  # type: ignore[assignment]
+    concept_counts: Dict[str, int] = None  # type: ignore[assignment]
 
     def observe(self, events: List[AgentEvent]) -> None:
+        if self.concept_modalities is None:
+            self.concept_modalities = {}
+        if self.concept_counts is None:
+            self.concept_counts = {}
+
         self.observed_event_count += len(events)
+        for e in events:
+            cid = e.meta.get("concept_id") if isinstance(e.meta, dict) else None
+            if cid is None:
+                continue
+            cid_str = str(cid)
+            self.concept_counts[cid_str] = int(self.concept_counts.get(cid_str, 0)) + 1
+            if e.modality:
+                mods = self.concept_modalities.setdefault(cid_str, set())
+                mods.add(e.modality)
 
     def update_models(
         self,
@@ -66,4 +82,3 @@ class SimpleLearner(BaseLearner):
 
         # 为了避免“未使用参数”告警，这里简单访问一次参数。
         _ = (world_model, self_model, drive_system, tools)
-

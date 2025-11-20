@@ -49,8 +49,12 @@ class SelfState:
     def to_dict(self) -> Dict[str, Any]:
         """将自我状态转换为字典，方便持久化或序列化。"""
 
-        # 使用 asdict 能够自动处理 dataclass 嵌套结构
-        return asdict(self)
+        # 默认 asdict 会保留 set，JSON 序列化会失败，这里手工转换。
+        data = asdict(self)
+        # capability_tags / modalities_seen 为 set，需转为列表便于 json.dump
+        data["capability_tags"] = list(self.capability_tags)
+        data["modalities_seen"] = list(self.modalities_seen)
+        return data
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "SelfState":
