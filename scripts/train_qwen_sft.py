@@ -44,12 +44,18 @@ def format_messages(messages: List[Dict[str, str]], sep: str = "\n") -> str:
 
 
 def _auto_find_jsonl(root: Path) -> Optional[Path]:
-    """在 root 下自动查找 jsonl 数据文件。"""
+    """在 root 下自动查找 jsonl 数据文件（含无扩展名的下载缓存）。"""
 
     candidates = list(root.rglob("*.jsonl"))
+    # 兼容 ModelScope downloads 生成的无扩展名文件：存在同名 .json 元信息
+    for p in root.rglob("*"):
+        if p.is_file() and "." not in p.name:
+            meta = p.with_name(p.name + ".json")
+            if meta.exists():
+                candidates.append(p)
+
     if not candidates:
         return None
-    # 取最短路径（通常是下载缓存）
     return sorted(candidates, key=lambda p: len(str(p)))[0]
 
 

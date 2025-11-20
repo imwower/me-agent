@@ -25,6 +25,11 @@ DEFAULT_CHECK: List[str] = [
 
 def _auto_find_jsonl(root: Path) -> Optional[Path]:
     files = list(root.rglob("*.jsonl"))
+    for p in root.rglob("*"):
+        if p.is_file() and "." not in p.name:
+            meta = p.with_name(p.name + ".json")
+            if meta.exists():
+                files.append(p)
     if not files:
         return None
     return sorted(files, key=lambda p: len(str(p)))[0]
