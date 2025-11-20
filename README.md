@@ -150,6 +150,18 @@ python scripts/demo_cli_agent.py
 5. `RuleBasedDialoguePolicy` 结合 Intent 与自我描述生成中文回复；
 6. `SimpleLearner` 观察本轮事件，为后续扩展学习逻辑预留接口。
 
+### 下载 CIFAR-100 数据集（Python 版）
+
+用于 `scripts/train_cifar100_cnn.py` 的示例数据，可直接用仓库脚本下载并解压到 `data/cifar100`：
+
+```bash
+python scripts/download_cifar100.py \
+  --output data/cifar100 \
+  --url https://www.cs.toronto.edu/~kriz/cifar-100-python.tar.gz
+```
+
+如遇本地证书校验问题，可加 `--insecure`（仅在受信网络使用），如需覆盖已有数据加 `--force`。
+
 
 ## 开发环境与约定
 
