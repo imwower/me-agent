@@ -6,7 +6,7 @@ from typing import Optional
 from me_core.types import AgentEvent, AudioRef, ImageRef
 
 from .concepts import ConceptNode, ConceptSpace
-from .embeddings import DummyEmbeddingBackend, EmbeddingBackend, TorchVisionEmbeddingBackend
+from .embeddings import DummyEmbeddingBackend, EmbeddingBackend
 
 
 @dataclass
@@ -29,28 +29,6 @@ class MultimodalAligner:
         space = ConceptSpace(similarity_threshold=similarity_threshold)
         backend = DummyEmbeddingBackend()
         return cls(backend=backend, concept_space=space)
-
-    @classmethod
-    def with_torchvision_backend(
-        cls,
-        similarity_threshold: float = 0.6,
-        device: str = "cpu",
-        use_pretrained: bool = True,
-    ) -> "MultimodalAligner":
-        """构造一个使用 TorchVisionEmbeddingBackend 的对齐器。"""
-
-        space = ConceptSpace(similarity_threshold=similarity_threshold)
-        backend = TorchVisionEmbeddingBackend(device=device, use_pretrained=use_pretrained)
-        return cls(backend=backend, concept_space=space)
-
-    @classmethod
-    def with_auto_backend(cls, similarity_threshold: float = 0.6) -> "MultimodalAligner":
-        """优先尝试真实嵌入后端，失败时回退到 Dummy。"""
-
-        try:
-            return cls.with_torchvision_backend(similarity_threshold=similarity_threshold)
-        except Exception:  # noqa: BLE001
-            return cls.with_dummy_backend(similarity_threshold=similarity_threshold)
 
     # --------------------------------------------------------------------- #
     # 对齐主入口
