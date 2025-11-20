@@ -1,0 +1,39 @@
+model:
+  vision_encoder:
+    name: "open_clip_vit_b16"
+    pretrained: "openai"
+    embed_dim: 512
+
+  text_decoder:
+    model_name: "uer/gpt2-chinese-cluecorpussmall"
+    max_length: 64
+
+  bridge:
+    type: "qformer"
+    hidden_dim: 512
+    num_query_tokens: 32
+    lora_r: 8
+    lora_alpha: 16
+
+  heads:
+    vqa:
+      hidden_dim: 512
+    answerability:
+      hidden_dim: 256
+    ocr_pointer:
+      hidden_dim: 256
+    chart:
+      hidden_dim: 256
+
+training:
+  lr: 1.0e-4
+  weight_decay: 0.01
+  max_steps: 2000
+  eval_steps: 200
+  gradient_accumulation_steps: 4
+  batch_size: 4
+  mixed_precision: "fp16"
+  device: "auto"
+  checkpoint_dir: "outputs/vqa_cn_long_checkpoints"
+  checkpoint_name: "vqa_cn_long_last.pt"
+
