@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import logging
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -23,21 +23,11 @@ DEFAULT_CHECK: List[str] = [
 ]
 
 
-def _load_dataset(dataset_id: str, target_root: Path, split: str = "train") -> Any:
-    try:
-        from modelscope.msdatasets import MsDataset  # type: ignore
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError("未找到 modelscope，请先 pip install modelscope") from exc
-
-    logger.info("加载数据集: %s (split=%s)", dataset_id, split)
-    ds = MsDataset.load(
-        dataset_id,
-        subset_name=None,
-        revision="master",
-        split=split,
-        cache_dir=str(target_root),
-    )
-    return ds
+def _auto_find_jsonl(root: Path) -> Optional[Path]:
+    files = list(root.rglob("*.jsonl"))
+    if not files:
+        return None
+    return sorted(files, key=lambda p: len(str(p)))[0]
 
 
 def _print_samples(ds: Any, max_rows: int = 2) -> None:
@@ -62,34 +52,36 @@ def _truncate_row(row: Dict[str, Any], max_len: int = 120) -> Dict[str, Any]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="检查已下载的 ModelScope 数据集样本")
     parser.add_argument(
-        "--datasets",
-        type=str,
-        default=None,
-        help="要检查的数据集列表，逗号分隔；默认检查少量代表性数据集。",
-    )
-    parser.add_argument(
         "--root",
         type=Path,
         default=Path("data/modelscope"),
         help="数据集缓存根目录，默认 data/modelscope",
     )
     parser.add_argument(
-        "--split",
-        type=str,
-        default="train",
-        help="要加载的数据集切分，默认 train",
+        "--file",
+        type=Path,
+        default=None,
+        help="直接指定 jsonl 文件路径（包含 messages 字段）。",
     )
     args = parser.parse_args()
 
-    ds_list = DEFAULT_CHECK if not args.datasets else [s.strip() for s in args.datasets.split(",") if s.strip()]
     root = args.root.expanduser()
 
-    for ds_id in ds_list:
-        try:
-            ds = _load_dataset(ds_id, root, split=args.split)
-            _print_samples(ds)
-        except Exception as exc:  # noqa: BLE001
-            logger.error("检查失败: %s (%s)", ds_id, exc)
+    data_path: Optional[Path] = None
+    if args.file is not None:
+        data_path = args.file.expanduser()
+    else:
+        data_path = _auto_find_jsonl(root)
+
+    if data_path is None or not data_path.exists():
+        logger.error("未找到 jsonl 文件，请用 --file 指定，或确认 data/modelscope 下存在下载文件。")
+        return
+
+    logger.info("加载本地 jsonl: %s", data_path)
+    from datasets import load_dataset  # type: ignore
+
+    ds = load_dataset("json", data_files={"train": str(data_path)}, split="train")
+    _print_samples(ds)
 
     logger.info("检查完成。")
 

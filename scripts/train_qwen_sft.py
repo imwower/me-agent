@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from datasets import load_dataset
 from transformers import (
@@ -43,6 +43,16 @@ def format_messages(messages: List[Dict[str, str]], sep: str = "\n") -> str:
     return sep.join(parts).strip()
 
 
+def _auto_find_jsonl(root: Path) -> Optional[Path]:
+    """在 root 下自动查找 jsonl 数据文件。"""
+
+    candidates = list(root.rglob("*.jsonl"))
+    if not candidates:
+        return None
+    # 取最短路径（通常是下载缓存）
+    return sorted(candidates, key=lambda p: len(str(p)))[0]
+
+
 def build_dataset(path: Path, max_samples: int | None = None):
     ds = load_dataset("json", data_files={"train": str(path)}, split="train")
     if max_samples is not None:
@@ -56,10 +66,8 @@ def main() -> None:
     parser.add_argument(
         "--data-file",
         type=Path,
-        default=Path(
-            "data/modelscope/swift___chinese-qwen3-235_b-2507-distill-data-110k-sft/qwen3_235b_2507_distill_110k.jsonl"
-        ),
-        help="JSONL 数据路径（包含 messages 字段）。",
+        default=None,
+        help="JSONL 数据路径（包含 messages 字段）。默认自动在 data/modelscope 下搜索 *.jsonl。",
     )
     parser.add_argument(
         "--model",
@@ -80,9 +88,16 @@ def main() -> None:
     parser.add_argument("--fp16", action="store_true", help="启用 FP16 训练（需 GPU 支持）。")
     args = parser.parse_args()
 
-    data_path = args.data_file.expanduser()
-    if not data_path.exists():
-        raise FileNotFoundError(f"找不到数据文件: {data_path}")
+    data_path: Path
+    if args.data_file is None:
+        auto_root = Path("data/modelscope").expanduser()
+        data_path = _auto_find_jsonl(auto_root)  # type: ignore[assignment]
+        if data_path is None:
+            raise FileNotFoundError("未找到数据文件，请通过 --data-file 指定 jsonl 路径。")
+    else:
+        data_path = args.data_file.expanduser()
+        if not data_path.exists():
+            raise FileNotFoundError(f"找不到数据文件: {data_path}")
 
     print(f"[数据] 加载 {data_path}")
     train_ds = build_dataset(data_path, max_samples=args.max_samples)
