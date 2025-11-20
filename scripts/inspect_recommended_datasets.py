@@ -19,10 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 DEFAULT_CHECK: List[str] = [
-    "AI-ModelScope/belle_open_source_1M",
-    "iic/cmrc2018",
-    "AI-ModelScope/LCSTS",
-    "damo/muge_retrieval",
+    "swift/Chinese-Qwen3-235B-2507-Distill-data-110k-SFT",
 ]
 
 
