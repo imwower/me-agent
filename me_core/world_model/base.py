@@ -223,6 +223,13 @@ class SimpleWorldModel(BaseWorldModel):
                 break
         return results
 
+    def events_between(self, start_step: int, end_step: int) -> List[TimedEvent]:
+        """返回指定步数区间内的事件。"""
+
+        return [
+            t for t in self._timeline if start_step <= t.step <= end_step
+        ]
+
     def top_concepts(self, top_k: int = 10) -> List[tuple[ConceptNode, ConceptStats]]:
         """按出现次数排序的 top_k 概念。"""
 

@@ -104,14 +104,20 @@ me-agent 是一个以“自我驱动的智能体”为核心隐喻的原型系�
   - `self_model/`：`SelfState` + `SimpleSelfModel`，记录已见模态、能力标签、最近行动并给出自述；
   - `drives/`：驱动力向量与更新规则，`SimpleDriveSystem` 输出带优先级的意图（回复/调用工具/好奇/自省）；
   - `tools/`：工具协议与注册表，内置 `EchoTool` / `TimeTool` / `HttpGetTool` / `FileReadTool` / `SelfDescribeTool` 等标准库级 stub；
-  - `learning/`：`SimpleLearner` / `LearningManager`，观察工具成功率与意图结果的轻量学习器；
-  - `dialogue/`：对话规划器与 `RuleBasedDialoguePolicy`，结合世界/自我/学习信息生成“我想 / 我要 / 我做”式回复；
-  - `agent/`：`StateStore` / 旧版 `run_once` 主循环，以及新的 `SimpleAgent`（清晰 step 流程、可选 debug/timeline dump）与多 Agent 脚手架。
+- `learning/`：`SimpleLearner` / `LearningManager`，观察工具成功率与意图结果的轻量学习器；
+- `dialogue/`：对话规划器与 `RuleBasedDialoguePolicy`，结合世界/自我/学习信息生成“我想 / 我要 / 我做”式回复；
+- `agent/`：`StateStore` / 旧版 `run_once` 主循环，以及新的 `SimpleAgent`（清晰 step 流程、可选 debug/timeline dump）与多 Agent 脚手架。
+- `memory/`：`EpisodicMemory` / `SemanticMemory` + Jsonl 存储，支持情节/概念长期记忆；
+- `tasks/`：Scenario/TaskStep/TaskResult 定义 + 运行器，便于评估不同场景；
+- `introspection/`：生成简单内省日志（总结/错误/改进建议）；
+- `config/`：`AgentConfig` 简易配置，支持选择 Dummy 或外部 backend、开关好奇/内省。
 - `scripts/`
   - `demo_cli_agent.py`：基于 `SimpleAgent` 的命令行 demo（推荐从这里体验最小闭环）；
   - `demo_multimodal_dummy.py`：使用 Dummy 对齐展示“文本/图片 → 概念空间 → Agent 回复”的占位式多模态 demo；
   - `demo_multi_agent.py`：两个 `SimpleAgent` 轮流对话的多 Agent 示例；
-  - `dump_timeline.py`：读取 JSONL 事件日志并打印时间线；
+  - `dump_timeline.py` / `view_timeline.py`：读取 JSONL 事件日志并打印时间线；
+  - `view_memory.py`：查看持久化的 Episode / 概念记忆；
+  - `run_experiments.py`：批量运行 Scenario，输出评估 + 内省日志；
   - 其他脚本：演示自我学习循环、驱动力调整和状态查看等。
 - 说明：当前多模态对齐为 R0 Dummy 版本，用于打通结构，后续会接入真实模型。
 - `tests/`
@@ -154,6 +160,14 @@ python scripts/demo_cli_agent.py
 4. 如需调用工具，则通过 `ToolCall` / `ToolResult` 连接 `EchoTool` / `TimeTool`；
 5. `RuleBasedDialoguePolicy` 结合 Intent 与自我描述生成中文回复；
 6. `SimpleLearner` 观察本轮事件，为后续扩展学习逻辑预留接口。
+
+## R2: Memory & Tasks & Introspection
+
+- 长期记忆：`EpisodicMemory`/`SemanticMemory` 支持将事件/概念写入 JSONL，重启可加载。
+- 场景评估：在 `me_core/tasks` 定义 Scenario/TaskStep，可用 `scripts/run_experiments.py` 批量运行并生成报告。
+- 内省日志：`IntrospectionGenerator` 可基于时间线和工具/意图统计生成“总结/错误/改进”条目。
+- 可视化：`scripts/view_timeline.py` 查看事件时间线，`scripts/view_memory.py` 查看持久化记忆。
+- 配置与 backend 插拔：`AgentConfig` 支持切换 Dummy/外部 embedding backend，开关好奇/内省等行为。
 
 ### 下载 CIFAR-100 数据集（Python 版）
 

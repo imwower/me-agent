@@ -161,6 +161,20 @@
 - 已完成：世界模型拥有时间线与概念统计（模态分布、最近步），自我模型支持模态/能力标签/最近行为的自述；驱动力提供带优先级的目标队列与好奇/自省意图；工具层引入 ToolSpec 协议 + HTTP/文件/自述等标准库级 stub；学习模块记录工具成功率与意图结果；对话策略融合世界/自我/学习信息输出“我想/我要/我做”；SimpleAgent 循环更清晰并支持 debug/timeline dump，多 Agent 对话脚手架与时间线 dump 脚本。  
 - 未来规划：接入真实的多模态 embedding backend 与复杂对齐策略；更细粒度的世界模型（因果/预测）；强化学习或规划式 drives；更丰富的工具体系（真实 HTTP/命令/多模态推理）；多 Agent 竞技/协作场景与更强的可视化。
 
+## R2: Memory, Tasks, Evaluation, Introspection
+
+- 引入长期记忆：Episodic/Semantic Memory，可持久化到磁盘并跨重启加载。
+- 任务与场景系统：定义标准化 Scenario/TaskStep，跑场景并简单评估。
+- 内省与自我评价：根据时间线、工具/意图统计生成反思日志。
+- 评估与对比实验脚手架：批量跑场景、配置切换，比对不同策略。
+- 配置与可插拔 backend：保持 me_core 标准库，预留外部 embedding/LLM backend 注入点。
+- 可视化与日志：用标准库脚本查看时间线、记忆、评估结果。
+
+### R2 完成情况
+
+- 已实现 episodic/semantic memory（Jsonl 持久化），场景运行与关键字评估、内省日志生成、实验 runner 及浏览脚本，AgentConfig + backend 插拔点。  
+- 下一步（R3 展望）：接入真实多模态/LLM backend，优化评估指标与评分、丰富场景集，加入更智能的 episode 摘要与自我改进策略。
+
 ---
 
 后续改造计划（简要）：

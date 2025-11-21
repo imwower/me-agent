@@ -5,6 +5,11 @@ import math
 import random
 from typing import List, Protocol
 
+try:  # 避免在 me_core 内部强依赖配置模块
+    from me_core.config import AgentConfig  # type: ignore
+except Exception:  # pragma: no cover - 仅用于静态检查
+    AgentConfig = None  # type: ignore
+
 from ..types import AudioRef, ImageRef
 
 
@@ -47,4 +52,25 @@ class DummyEmbeddingBackend:
         return [self._hash_to_vector(ref.path) for ref in audio_refs]
 
 
-__all__ = ["EmbeddingBackend", "DummyEmbeddingBackend"]
+def create_embedding_backend(config: AgentConfig | None = None) -> EmbeddingBackend:
+    """
+    根据配置创建 embedding backend。
+    默认使用 DummyEmbeddingBackend，若配置要求非 dummy，则尝试从 me_ext.backends 导入。
+    """
+
+    use_dummy = True
+    if config is not None and hasattr(config, "use_dummy_embedding"):
+        use_dummy = bool(config.use_dummy_embedding)  # type: ignore[attr-defined]
+    if use_dummy:
+        return DummyEmbeddingBackend()
+
+    try:
+        from me_ext.backends import RealEmbeddingBackend  # type: ignore
+
+        return RealEmbeddingBackend()  # type: ignore[call-arg]
+    except Exception:
+        # 回退到 Dummy，保证核心流程不中断
+        return DummyEmbeddingBackend()
+
+
+__all__ = ["EmbeddingBackend", "DummyEmbeddingBackend", "create_embedding_backend"]

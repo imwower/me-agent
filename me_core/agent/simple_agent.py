@@ -10,12 +10,15 @@ from me_core.event_stream import EventStream
 from me_core.types import AgentEvent, EventKind, ToolCall, ToolResult
 
 from me_core.alignment.concepts import ConceptSpace
-from me_core.alignment.embeddings import DummyEmbeddingBackend
+from me_core.alignment.embeddings import DummyEmbeddingBackend, create_embedding_backend
 from me_core.alignment.aligner import MultimodalAligner
 
+from me_core.config import AgentConfig
 from ..dialogue import BaseDialoguePolicy
 from ..drives import BaseDriveSystem, Intent
 from ..learning import BaseLearner
+from ..memory import EpisodicMemory, SemanticMemory, JsonlMemoryStorage
+from ..introspection import IntrospectionGenerator, IntrospectionLog
 from ..perception import ImagePerception
 from ..perception.base import BasePerception
 from ..self_model import BaseSelfModel
@@ -84,6 +87,10 @@ class SimpleAgent(BaseAgent):
     learner: BaseLearner
     dialogue_policy: BaseDialoguePolicy
     event_stream: EventStream = field(default_factory=EventStream)
+    config: Optional[AgentConfig] = field(default=None, repr=False)
+    episodic_memory: Optional[EpisodicMemory] = field(default=None, repr=False)
+    semantic_memory: Optional[SemanticMemory] = field(default=None, repr=False)
+    introspection_generator: Optional[IntrospectionGenerator] = field(default=None, repr=False)
     logger: Optional[logging.Logger] = field(default=None, repr=False)
     timeline_path: Optional[Path] = field(default=None, repr=False)
     image_perception: Optional[BasePerception] = field(default=None, init=False, repr=False)
@@ -104,6 +111,27 @@ class SimpleAgent(BaseAgent):
     _local_step: int = field(default=0, init=False, repr=False)
 
     def __post_init__(self) -> None:
+        if self.config is not None:
+            if self.timeline_path is None and self.config.timeline_path:
+                self.timeline_path = Path(self.config.timeline_path)
+            # 驱动力开关
+            if hasattr(self.drive_system, "enable_curiosity"):
+                try:
+                    self.drive_system.enable_curiosity = bool(self.config.enable_curiosity)
+                except Exception:
+                    pass
+            if hasattr(self.drive_system, "enable_reflection"):
+                try:
+                    self.drive_system.enable_reflection = bool(self.config.enable_introspection)
+                except Exception:
+                    pass
+
+        # 根据配置选择 embedding backend
+        try:
+            self.embedding_backend = create_embedding_backend(self.config)
+        except Exception:
+            self.embedding_backend = DummyEmbeddingBackend(dim=64)
+
         # 设定默认的多模态对齐组件与图谱
         if self.aligner is None:
             self.aligner = MultimodalAligner(
@@ -148,6 +176,25 @@ class SimpleAgent(BaseAgent):
 
         if self.timeline_path is not None and not isinstance(self.timeline_path, Path):
             self.timeline_path = Path(self.timeline_path)  # type: ignore[assignment]
+
+        # 初始化持久化记忆
+        if self.episodic_memory is None or self.semantic_memory is None:
+            episodes_path = getattr(self.config, "episodes_path", None) if self.config else None
+            concepts_path = getattr(self.config, "concepts_path", None) if self.config else None
+            if episodes_path:
+                storage = JsonlMemoryStorage(Path(episodes_path), Path(concepts_path) if concepts_path else None)
+                if self.episodic_memory is None:
+                    self.episodic_memory = EpisodicMemory(storage)
+                if self.semantic_memory is None:
+                    self.semantic_memory = SemanticMemory(storage)
+
+        if self.introspection_generator is None:
+            try:
+                self.introspection_generator = IntrospectionGenerator(
+                    world=self.world_model, self_model=self.self_model, learner=self.learner  # type: ignore[arg-type]
+                )
+            except Exception:
+                self.introspection_generator = None
 
     def _next_step(self) -> int:
         """获取下一个 step 编号。"""
@@ -349,6 +396,14 @@ class SimpleAgent(BaseAgent):
         intent_success = tool_success if intent.kind == "call_tool" else True
         self.learner.observe_intent_outcome(intent, bool(intent_success))
 
+        # 6) 写入长期记忆
+        if self.episodic_memory is not None:
+            episode = self.episodic_memory.begin_episode(step_id, tags=None)
+            summary = self._summarize_step(step_events, intent, reply)
+            self.episodic_memory.end_episode(episode, step_id, step_events, summary)
+        if self.semantic_memory is not None:
+            self._sync_semantic_memory()
+
         if debug and self.logger:
             top_concepts = getattr(self.world_model, "top_concepts", lambda top_k=3: [])(top_k=3)
             top_names = ", ".join(c.name for c, _ in top_concepts) if top_concepts else "-"
@@ -374,3 +429,37 @@ class SimpleAgent(BaseAgent):
             print(f"[对话] 生成回复：{reply}")  # noqa: T201
 
         return reply
+
+    def _summarize_step(self, events: List[AgentEvent], intent: Intent, reply: Optional[str]) -> str:
+        texts: List[str] = []
+        for ev in events:
+            payload = ev.payload or {}
+            if isinstance(payload, dict):
+                raw = payload.get("raw")
+                if isinstance(raw, dict) and isinstance(raw.get("text"), str):
+                    texts.append(raw["text"])
+        intent_part = f"意图={intent.kind}"
+        reply_part = f"回复={reply}" if reply else ""
+        return "; ".join([intent_part] + texts + ([reply_part] if reply_part else []))
+
+    def _sync_semantic_memory(self) -> None:
+        if self.semantic_memory is None:
+            return
+        top_concepts = getattr(self.world_model, "top_concepts", lambda top_k=3: [])(top_k=3)
+        for concept, stats in top_concepts:
+            modalities = []
+            if hasattr(stats, "modalities") and isinstance(stats.modalities, dict):
+                modalities = [f"{k}:{v}" for k, v in stats.modalities.items()]
+            desc = f"概念「{concept.name}」最近出现 {stats.count} 次，模态分布：{', '.join(modalities) or '未知'}。"
+            self.semantic_memory.upsert_concept_memory(
+                concept_id=concept.id,
+                name=concept.name,
+                description=desc,
+                tags=set(modalities),
+            )
+
+    def introspect(self, scenario_id: Optional[str], start_step: int, end_step: Optional[int] = None) -> Optional[IntrospectionLog]:
+        if self.introspection_generator is None:
+            return None
+        final_step = end_step if end_step is not None else getattr(self.world_model, "current_step", start_step)
+        return self.introspection_generator.generate(scenario_id, start_step, final_step)

@@ -77,6 +77,8 @@ class SimpleDriveSystem(BaseDriveSystem):
     idle_threshold_seconds: float = 60.0
     curiosity_min_count: int = 2
     reflect_gap_steps: int = 5
+    enable_curiosity: bool = True
+    enable_reflection: bool = True
 
     def decide_intent(
         self,
@@ -164,7 +166,7 @@ class SimpleDriveSystem(BaseDriveSystem):
                     interesting = (cid, stats)
                     break
 
-        if interesting is not None:
+        if self.enable_curiosity and interesting is not None:
             cid, stats = interesting
             name: str | None = None
             if concept_space is not None and hasattr(concept_space, "all_concepts"):
@@ -195,7 +197,7 @@ class SimpleDriveSystem(BaseDriveSystem):
 
         # 3. 根据 self_state 决定是否生成 reflect_self / inspect_world 候选
         current_step = getattr(world_model, "_current_step", 0)
-        if current_step - state.last_step >= self.reflect_gap_steps:
+        if self.enable_reflection and current_step - state.last_step >= self.reflect_gap_steps:
             add(
                 Intent(
                     kind="reflect_self",
