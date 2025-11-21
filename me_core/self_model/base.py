@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Optional, TYPE_CHECKING
 
 from me_core.types import AgentEvent
 
@@ -9,6 +9,8 @@ from .self_state import SelfState
 from .self_summarizer import summarize_self
 from .self_updater import update_from_event
 
+if TYPE_CHECKING:
+    from me_core.world_model.base import SimpleWorldModel
 
 class BaseSelfModel(ABC):
     """自我模型基类。
@@ -47,7 +49,12 @@ class SimpleSelfModel(BaseSelfModel):
         """按顺序依次用事件驱动自我状态更新。"""
 
         for e in events:
-            self._state = update_from_event(self._state, e)
+            self.observe_event(e)
+
+    def observe_event(self, event: AgentEvent) -> None:
+        """根据单个事件更新自我模型。"""
+
+        self._state = update_from_event(self._state, event)
 
     def describe(self) -> str:
         """将 summarize_self 的三个字段拼接为一段短文本。"""
@@ -61,8 +68,35 @@ class SimpleSelfModel(BaseSelfModel):
         text = " ".join(p for p in parts if p)
         return text or "我目前还在初始化自己的自我模型。"
 
+    def describe_self(self, world_model: Optional["SimpleWorldModel"] = None) -> str:
+        """
+        用简单中文描述当前“我”的状态：
+        - 见过哪些模态（例如：文本/图像）
+        - 拥有哪些能力标签（如时间查询、多模态 dummy 对齐）
+        - （可选）最近常见概念（如果提供了 world_model）
+        """
+
+        segments: List[str] = []
+        if self._state.seen_modalities:
+            mods = "、".join(sorted(self._state.seen_modalities))
+            segments.append(f"我目前见过的模态包括：{mods}")
+
+        if self._state.capability_tags:
+            tags = "、".join(sorted(self._state.capability_tags))
+            segments.append(f"已具备的能力标签：{tags}")
+
+        if world_model is not None:
+            concepts = getattr(world_model, "recent_concepts", lambda top_k=3: [])(top_k=3)
+            if concepts:
+                names = "、".join(c.name for c in concepts[:3])
+                segments.append(f"最近对齐较多的概念有：{names}")
+
+        if not segments:
+            return self.describe()
+
+        return "；".join(segments)
+
     def get_state(self) -> SelfState:
         """返回当前自我状态。"""
 
         return self._state
-

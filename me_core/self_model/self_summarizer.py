@@ -149,8 +149,9 @@ def summarize_self(state: SelfState) -> Dict[str, str]:
     if perception_text:
         capability_text += f" {perception_text}"
 
-    if state.modalities_seen:
-        mods = "、".join(sorted(state.modalities_seen))
+    mods_set = state.seen_modalities or state.modalities_seen
+    if mods_set:
+        mods = "、".join(sorted(mods_set))
         capability_text += f" 我已经实际接触过的模态包括：{mods}。"
 
     trend_text = _format_capability_trend(state.capability_trend)

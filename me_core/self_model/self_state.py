@@ -29,6 +29,13 @@ class SelfState:
     self_concept_id: Optional[str] = None
     capability_tags: Set[str] = field(default_factory=set)
     modalities_seen: Set[str] = field(default_factory=set)
+    seen_modalities: Set[str] = field(default_factory=set)
+
+    def __post_init__(self) -> None:
+        # 确保新老字段保持同步，避免两套记录分叉
+        combined = set(self.modalities_seen) | set(self.seen_modalities)
+        self.modalities_seen = combined
+        self.seen_modalities = combined
 
     def add_activity(self, desc: str, max_len: int = 20) -> None:
         """追加一条活动摘要，并在超出长度时裁剪旧的记录。
@@ -54,6 +61,7 @@ class SelfState:
         # capability_tags / modalities_seen 为 set，需转为列表便于 json.dump
         data["capability_tags"] = list(self.capability_tags)
         data["modalities_seen"] = list(self.modalities_seen)
+        data["seen_modalities"] = list(self.seen_modalities)
         return data
 
     @classmethod
@@ -74,6 +82,9 @@ class SelfState:
             self_concept_id=data.get("self_concept_id"),
             capability_tags=set(data.get("capability_tags", []) or []),
             modalities_seen=set(data.get("modalities_seen", []) or []),
+            seen_modalities=set(
+                data.get("seen_modalities", []) or data.get("modalities_seen", []) or []
+            ),
         )
 
 

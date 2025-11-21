@@ -11,13 +11,14 @@ class MultiModalPerceptionTestCase(unittest.TestCase):
 
     def test_text_only_input(self) -> None:
         p = MultiModalPerception()
-        event = p.perceive("你好，多模态世界")
+        events = p.perceive("你好，多模态世界")
+        self.assertTrue(events)
+        event = events[0]
 
         self.assertEqual(event.event_type, "perception")
         self.assertEqual(event.modality, "text")
         self.assertIn("text", event.tags)
         payload = event.payload or {}
-        self.assertEqual(payload.get("kind"), "perception")
         raw = payload.get("raw") or {}
         self.assertEqual(raw.get("text"), "你好，多模态世界")
 
@@ -27,7 +28,9 @@ class MultiModalPerceptionTestCase(unittest.TestCase):
             text="这张图片里有什么？",
             image_meta={"path": "examples/apple.png"},
         )
-        event = p.perceive(mm)
+        events = p.perceive(mm)
+        self.assertTrue(events)
+        event = events[0]
 
         self.assertEqual(event.event_type, "perception")
         # 单文本 + 单图像 → mixed 模态
@@ -44,7 +47,9 @@ class ImagePerceptionTestCase(unittest.TestCase):
 
     def test_image_path_input(self) -> None:
         p = ImagePerception()
-        event = p.perceive("examples/dummy.png")
+        events = p.perceive("examples/dummy.png")
+        self.assertTrue(events)
+        event = events[0]
 
         self.assertEqual(event.event_type, "perception")
         self.assertEqual(event.modality, "image")
@@ -53,4 +58,3 @@ class ImagePerceptionTestCase(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

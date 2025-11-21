@@ -1,26 +1,30 @@
 """多模态感知（perception）相关桩实现。
 
 当前提供：
-- 若干可替换的 EncoderStub（Text/Image/Audio/Video）；
-- encode_multimodal：接收 MultiModalInput，返回各模态的向量表示；
-- BasePerception / TextPerception：感知接口与最简文本感知实现。
+- 文本/图片/音频感知器（TextPerception/ImagePerception/AudioPerception）；
+- MultiModalPerception 兼容旧接口；
+- encode_multimodal：接收 MultiModalInput，返回各模态的伪向量表示；
+- default_perceive：根据输入类型自动选择合适的感知器。
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Dict, List
+from pathlib import Path
+from typing import Any, Dict, List
 
-from me_core.types import MultiModalInput
+from me_core.types import AudioRef, ImageRef, MultiModalInput, AgentEvent
 
-from .base import BasePerception, TextPerception, MultiModalPerception  # noqa: F401
+from .audio_perception import AudioPerception  # noqa: F401
 from .audio_encoder_stub import AudioEncoderStub  # noqa: F401
+from .base import BasePerception  # noqa: F401
 from .image_encoder_stub import ImageEncoderStub  # noqa: F401
+from .image_perception import ImagePerception  # noqa: F401
+from .multimodal_perception import MultiModalPerception  # noqa: F401
 from .processor import encode_to_event  # noqa: F401
 from .text_encoder_stub import TextEncoderStub  # noqa: F401
+from .text_perception import TextPerception  # noqa: F401
 from .video_encoder_stub import VideoEncoderStub  # noqa: F401
-from .image_perception import ImagePerception  # noqa: F401
-from .audio_perception import AudioPerception  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +40,7 @@ __all__ = [
     "VideoEncoderStub",
     "encode_multimodal",
     "encode_to_event",
-    "create_default_perception_pipeline",
+    "default_perceive",
 ]
 
 
@@ -72,12 +76,32 @@ def encode_multimodal(input_data: MultiModalInput) -> Dict[str, List[float]]:
     return results
 
 
-def create_default_perception_pipeline() -> BasePerception:
-    """构造一个默认的多模态感知流水线。
-
-    当前实现：
-        - 使用 MultiModalPerception，在传入 str 时退化为 TextPerception；
-        - 后续可扩展为根据输入类型自动分派到 ImagePerception / AudioPerception 等。
+def default_perceive(raw_input: Any) -> List[AgentEvent]:
+    """
+    根据 raw_input 类型分派到合适的感知器：
+    - str 或 list[str]: 当作文本
+    - ImageRef 或常见图片后缀的路径: 当作图片
+    - AudioRef: 当作音频
+    - MultiModalInput: 使用 MultiModalPerception 兼容旧逻辑
     """
 
-    return MultiModalPerception()
+    if isinstance(raw_input, MultiModalInput):
+        return MultiModalPerception().perceive(raw_input)
+
+    if isinstance(raw_input, (str, list)):
+        # 如果是字符串路径，demo 可自行传给 ImagePerception，这里默认视为文本
+        return TextPerception().perceive(raw_input)
+
+    if isinstance(raw_input, ImageRef):
+        return ImagePerception().perceive(raw_input)
+
+    if isinstance(raw_input, AudioRef):
+        return AudioPerception().perceive(raw_input)
+
+    if isinstance(raw_input, str):
+        suffix = Path(raw_input).suffix.lower()
+        if suffix in {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}:
+            return ImagePerception().perceive(raw_input)
+        return TextPerception().perceive(raw_input)
+
+    return []

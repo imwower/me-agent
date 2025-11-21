@@ -3,6 +3,21 @@
 > 本文面向协同开发者与未来的“自己”，总结当前仓库的整体结构、已实现能力、明显的桩/原型模块以及与多模态对齐相关的设计现状。  
 > 不改变现有 README 的语义，只补充一个更偏工程视角的“现在在哪儿 / 能做啥 / 哪些还没做完”。
 
+## R0 多模态对齐现状速记
+
+- 感知层包含 `TextPerception` 与占位版 `ImagePerception` / `AudioPerception`，默认 demo 仍以文本为主。
+- 对齐/概念空间已用 Dummy 向量完成占位实现，等待后续接入真实模型。
+- R0 目标：用 Dummy 向量跑通“多模态感知 → Dummy 对齐 → 概念空间 → 世界/自我模型 → Agent”的结构闭环，为后续接入真实模型做准备。
+
+## R0 多模态对齐实现简述
+
+- AgentEvent 新增默认字段：modality/payload/embedding/source/tags，保持向后兼容。
+- DummyEmbeddingBackend：基于 sha256 + 伪随机生成稳定单位向量，不依赖真实模型。
+- ConceptSpace：维护 ConceptNode（id/name/aliases/centroid/examples），支持余弦最近邻、get_or_create 和观测更新。
+- MultimodalAligner：根据事件模态调用 Dummy backend 生成 embedding，对齐/创建概念并回填到事件。
+- world_model/self_model：SimpleWorldModel 记录概念计数与模态覆盖；SelfState 追踪 seen_modalities/capability_tags，并提供 describe_self。
+- Demo：`python scripts/demo_multimodal_dummy.py [--image <path>]`，展示“文本/图片 → 事件 → Dummy 对齐 → 概念空间 → 世界/自我 → Agent”的闭环。
+
 ## 快速状态提示（R1 多模态对齐）
 
 - 核心仍坚持标准库，`requirements.txt` 仅作占位，真实多模态模型需在外部注入。
@@ -103,7 +118,7 @@
   - `AgentEvent.payload["raw"]` 中保存原始文本和各模态的元信息，便于 later 构建 `ImageRef` / `AudioRef` 等结构。
 
 - 感知 → 事件流 → 世界/自我模型：
-  - `SimpleAgent._append_events` 已经在一个地方集中做了“写 event_stream + world_model.update + self_model.update_from_events”，后续只要让 world/self model 利用 embedding 和概念空间即可。  
+- `SimpleAgent` 通过 `_register_event` 集中完成“写 event_stream + world_model/self_model 更新”，后续只要让 world/self model 利用 embedding 和概念空间即可。  
   - `SimpleDriveSystem` 的决策接口已经接收 `world_model` 和 `self_model` 引用，为根据“概念/模态统计”调整意图留有余地。
 
 这些设计说明：**多模态对齐子系统可以自然地插在“感知到的 embedding → 概念空间 → 世界/自我模型更新”这条链路中，不需要大改 Agent 主循环的结构。**

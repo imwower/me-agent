@@ -132,16 +132,47 @@ class SimpleDriveSystem(BaseDriveSystem):
         # 1.5) 若最近未收到用户输入，但概念空间存在“单一模态、重复出现”的概念，
         #      触发好奇心，引导用户提供更多模态（例如图片或文字）。
         concept_stats = getattr(world_model, "concept_stats", {}) or {}
+        concept_space = getattr(world_model, "concept_space", None)
+
+        def _get_count(stats: Any) -> int:
+            if hasattr(stats, "count"):
+                return int(getattr(stats, "count", 0))
+            if isinstance(stats, dict):
+                return int(stats.get("count", 0))
+            return 0
+
+        def _get_modalities(stats: Any) -> set[str]:
+            if hasattr(stats, "modalities"):
+                mods = getattr(stats, "modalities", set()) or set()
+                if isinstance(mods, dict):
+                    return set(mods.keys())
+                return set(mods)
+            if isinstance(stats, dict):
+                mods = stats.get("modalities") or {}
+                if isinstance(mods, dict):
+                    return set(mods.keys())
+                if isinstance(mods, (list, set, tuple)):
+                    return set(mods)
+            return set()
+
         curious_target = None
         for cid, stats in concept_stats.items():
-            modalities = stats.get("modalities") or {}
-            if len(modalities) <= 1 and int(stats.get("count", 0)) >= 2:
+            modalities = _get_modalities(stats)
+            if len(modalities) <= 1 and _get_count(stats) >= 2:
                 curious_target = (cid, stats)
                 break
 
         if curious_target is not None:
             cid, stats = curious_target
-            name = stats.get("name") or cid
+            name: str | None = None
+            if concept_space is not None and hasattr(concept_space, "all_concepts"):
+                for concept in concept_space.all_concepts():  # type: ignore[attr-defined]
+                    if str(concept.id) == str(cid):
+                        name = concept.name
+                        break
+            if name is None:
+                name = str(cid)
+
             explanation = (
                 f"概念「{name}」已多次出现但只有单一模态，希望获得更多相关信息。"
             )

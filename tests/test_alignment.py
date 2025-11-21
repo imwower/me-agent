@@ -14,8 +14,10 @@ class AlignmentBasicTestCase(unittest.TestCase):
 
     def setUp(self) -> None:
         backend = DummyEmbeddingBackend(dim=32)
-        space = ConceptSpace(similarity_threshold=0.6)
-        self.aligner = MultimodalAligner(backend=backend, concept_space=space)
+        space = ConceptSpace()
+        self.aligner = MultimodalAligner(
+            backend=backend, concept_space=space, similarity_threshold=0.6
+        )
 
     def test_same_text_aligns_to_same_concept(self) -> None:
         """相同文本多次对齐应落在同一概念上。"""
@@ -38,8 +40,10 @@ class AlignmentBasicTestCase(unittest.TestCase):
         """语义差异较大的文本在高阈值下应形成不同概念。"""
 
         backend = DummyEmbeddingBackend(dim=32)
-        space = ConceptSpace(similarity_threshold=0.9)
-        aligner = MultimodalAligner(backend=backend, concept_space=space)
+        space = ConceptSpace()
+        aligner = MultimodalAligner(
+            backend=backend, concept_space=space, similarity_threshold=0.9
+        )
 
         e1 = encode_to_event(MultiModalInput(text="苹果"), source="test")
         e2 = encode_to_event(MultiModalInput(text="小狗"), source="test")
@@ -68,4 +72,3 @@ class AlignmentBasicTestCase(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

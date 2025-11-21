@@ -98,7 +98,8 @@ me-agent 是一个以“自我驱动的智能体”为核心隐喻的原型系�
 - `me_core/`
   - `types.py`：核心通用数据结构，例如 `AgentEvent`、`ToolCall`、`ToolResult` 等；
   - `event_stream.py`：内存中的事件流与事件历史工具；
-  - `perception/`：多模态感知桩实现，`TextPerception` 用于将文本输入转为感知事件；
+  - `perception/`：文本/图片感知桩，`TextPerception` 拆分文本事件，`ImagePerception` 记录图片路径与元信息；
+  - `alignment/`：概念空间 + Dummy 多模态对齐（R0 占位版，不依赖真实模型）；
   - `world_model/`：`SimpleWorldModel` 基于事件历史做简单统计；
   - `self_model/`：`SelfState` + `SimpleSelfModel`，用于描述与总结“我是谁 / 我在做什么”；
   - `drives/`：驱动力向量与更新规则，以及基于最近事件给出 `Intent` 的 `SimpleDriveSystem`；
@@ -108,7 +109,9 @@ me-agent 是一个以“自我驱动的智能体”为核心隐喻的原型系�
   - `agent/`：`StateStore` / 旧版 `run_once` 主循环，以及新的 `SimpleAgent` Agent 框架。
 - `scripts/`
   - `demo_cli_agent.py`：基于 `SimpleAgent` 的命令行 demo（推荐从这里体验最小闭环）；
+  - `demo_multimodal_dummy.py`：使用 Dummy 对齐展示“文本/图片 → 概念空间 → Agent 回复”的占位式多模态 demo；
   - 其他脚本：演示自我学习循环、驱动力调整和状态查看等。
+- 说明：当前多模态对齐为 R0 Dummy 版本，用于打通结构，后续会接入真实模型。
 - `tests/`
   - 覆盖类型定义、感知、驱动力、学习模块以及 `SimpleAgent` 单步行为等。
 - `requirements.txt`：当前为空，仅作占位，强调仅依赖 Python 标准库。

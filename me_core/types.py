@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, Optional, Type, TypeVar, NewType, Set
+from typing import Any, Dict, Optional, Type, TypeVar, NewType, Set, Literal, List
 
 # 为了在类型层集中暴露核心状态结构，这里仅定义/聚合“轻量数据结构”。
 # 复杂的更新逻辑仍然放在各自子模块中（如 self_model / drives 等），
@@ -164,14 +164,14 @@ class AgentEvent:
 
     timestamp: datetime
     event_type: str
-    payload: Optional[JsonDict] = None
+    payload: JsonDict = field(default_factory=dict)
     id: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    source: Optional[str] = None
+    source: Literal["user", "environment", "tool"] | str = "user"
     kind: Optional[EventKind] = None
     trace_id: Optional[str] = None
     meta: JsonDict = field(default_factory=dict)
-    modality: Optional[str] = None
-    embedding: Optional[list[float]] = None
+    modality: Literal["text", "image", "audio", "mixed"] | str = "text"
+    embedding: Optional[List[float]] = None
     tags: Set[str] = field(default_factory=set)
 
     @staticmethod
@@ -188,11 +188,12 @@ class AgentEvent:
         方便在代码中直接写：
             AgentEvent.now("perception", {"text": "用户输入"})
         """
+        payload_data = payload if isinstance(payload, dict) else {}
         return AgentEvent(
             timestamp=datetime.now(timezone.utc),
             event_type=event_type,
-            payload=payload,
-            source=source,
+            payload=payload_data,
+            source=source or "user",
             kind=kind,
             trace_id=trace_id,
         )
@@ -210,7 +211,7 @@ class AgentEvent:
             "id": self.id,
             "timestamp": self.timestamp.isoformat(),
             "event_type": self.event_type,
-            "payload": self.payload,
+            "payload": dict(self.payload) if self.payload is not None else {},
             "source": self.source,
             "kind": self.kind.value if isinstance(self.kind, EventKind) else self.kind,
             "trace_id": self.trace_id,
@@ -240,7 +241,8 @@ class AgentEvent:
             timestamp = datetime.now(timezone.utc)
 
         event_type = str(data.get("event_type") or "unknown")
-        payload = data.get("payload")
+        payload_raw = data.get("payload")
+        payload: JsonDict = dict(payload_raw) if isinstance(payload_raw, dict) else {}
 
         kind_raw = data.get("kind")
         kind: Optional[EventKind]
@@ -258,17 +260,27 @@ class AgentEvent:
         else:
             tags_set = set()
 
+        embedding_raw = data.get("embedding")
+        embedding: Optional[List[float]]
+        if isinstance(embedding_raw, list):
+            embedding = [float(x) for x in embedding_raw]
+        else:
+            embedding = None
+
+        modality = data.get("modality") or "text"
+        source_val = data.get("source") or "user"
+
         return cls(
             timestamp=timestamp,
             event_type=event_type,
             payload=payload,
             id=str(data.get("id") or datetime.now(timezone.utc).isoformat()),
-            source=data.get("source"),
+            source=source_val,
             kind=kind,
             trace_id=data.get("trace_id"),
             meta=dict(data.get("meta") or {}),
-            modality=data.get("modality"),
-            embedding=data.get("embedding"),
+            modality=modality,
+            embedding=embedding,
             tags=tags_set,
         )
 

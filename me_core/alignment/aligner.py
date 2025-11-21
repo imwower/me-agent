@@ -1,149 +1,116 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
-from me_core.types import AgentEvent, AudioRef, ImageRef
-
-from .concepts import ConceptNode, ConceptSpace
-from .embeddings import DummyEmbeddingBackend, EmbeddingBackend
+from ..types import AgentEvent, ImageRef, AudioRef
+from .concepts import ConceptSpace, ConceptNode, _cosine_similarity
+from .embeddings import EmbeddingBackend, DummyEmbeddingBackend
 
 
 @dataclass
 class MultimodalAligner:
-    """多模态对齐器（最小可运行版）。
-
-    职责：
-        - 基于文本/图像/音频内容生成嵌入；
-        - 将观测事件对齐到概念空间中的某个 ConceptNode；
-        - 在事件上回填 embedding 字段，便于后续模块使用。
-    """
-
     backend: EmbeddingBackend
     concept_space: ConceptSpace
+    similarity_threshold: float = 0.8
 
     @classmethod
-    def with_dummy_backend(cls, similarity_threshold: float = 0.6) -> "MultimodalAligner":
-        """构造一个使用 DummyEmbeddingBackend + 默认 ConceptSpace 的对齐器。"""
-
-        space = ConceptSpace(similarity_threshold=similarity_threshold)
+    def with_dummy_backend(cls, similarity_threshold: float = 0.8) -> "MultimodalAligner":
+        space = ConceptSpace()
         backend = DummyEmbeddingBackend()
-        return cls(backend=backend, concept_space=space)
+        return cls(backend=backend, concept_space=space, similarity_threshold=similarity_threshold)
 
-    # --------------------------------------------------------------------- #
-    # 对齐主入口
-    # --------------------------------------------------------------------- #
+    def _extract_text(self, event: AgentEvent) -> str:
+        payload = event.payload or {}
+        if isinstance(payload, dict):
+            if isinstance(payload.get("text"), str):
+                return payload["text"]
+            raw = payload.get("raw")
+            if isinstance(raw, dict) and isinstance(raw.get("text"), str):
+                return raw["text"]
+        return ""
+
+    def _extract_image_ref(self, payload: object) -> Optional[ImageRef]:
+        if isinstance(payload, dict):
+            ref = payload.get("image_ref")
+            if isinstance(ref, ImageRef):
+                return ref
+            if isinstance(payload.get("path"), str):
+                return ImageRef(path=str(payload.get("path")))
+        return None
+
+    def _extract_audio_ref(self, payload: object) -> Optional[AudioRef]:
+        if isinstance(payload, dict):
+            ref = payload.get("audio_ref")
+            if isinstance(ref, AudioRef):
+                return ref
+            if isinstance(payload.get("path"), str):
+                return AudioRef(path=str(payload.get("path")))
+        return None
 
     def align_event(self, event: AgentEvent) -> Optional[ConceptNode]:
-        """对单个事件执行多模态对齐。
-
-        当前策略：
-            - 若有文本，则优先使用文本作为对齐依据；
-            - 否则若有图像元信息，则使用图像；
-            - 否则若有音频元信息，则使用音频；
-            - 若无法提取有效内容，则返回 None。
+        """
+        根据事件的模态与 payload，生成 embedding，并在 ConceptSpace 中找到/创建对应概念。
+        将 embedding 填回 event.embedding。
+        返回对应的 ConceptNode（或 None）。
         """
 
         payload = event.payload or {}
-        raw = payload.get("raw") if isinstance(payload, dict) else None
+        modality = event.modality or payload.get("modality") or "text"
+        event.modality = modality
 
-        text: Optional[str] = None
-        image_ref: Optional[ImageRef] = None
-        audio_ref: Optional[AudioRef] = None
-
-        if isinstance(raw, dict):
-            if isinstance(raw.get("text"), str):
-                text = raw["text"]
-            img_meta = raw.get("image_meta")
-            if isinstance(img_meta, dict) and img_meta.get("path"):
-                image_ref = ImageRef(
-                    path=str(img_meta.get("path")),
-                    width=img_meta.get("width"),
-                    height=img_meta.get("height"),
-                    meta={k: v for k, v in img_meta.items() if k not in {"path", "width", "height"}},
-                )
-            audio_meta = raw.get("audio_meta")
-            if isinstance(audio_meta, dict) and audio_meta.get("path"):
-                audio_ref = AudioRef(
-                    path=str(audio_meta.get("path")),
-                    duration=audio_meta.get("duration"),
-                    sample_rate=audio_meta.get("sample_rate"),
-                    meta={k: v for k, v in audio_meta.items() if k not in {"path", "duration", "sample_rate"}},
-                )
-
-        # 按优先级选择模态
         embedding = None
         name_hint: Optional[str] = None
 
-        if text:
-            embedding = self.backend.embed_text([text])[0]
-            name_hint = text[:16]
-            event.modality = event.modality or "text"
-        elif image_ref is not None:
-            embedding = self.backend.embed_image([image_ref])[0]
-            name_hint = image_ref.path.split("/")[-1]
-            event.modality = event.modality or "image"
-        elif audio_ref is not None:
-            embedding = self.backend.embed_audio([audio_ref])[0]
-            name_hint = audio_ref.path.split("/")[-1]
-            event.modality = event.modality or "audio"
+        if modality == "text":
+            text = self._extract_text(event)
+            if text:
+                embedding = self.backend.embed_text([text])[0]
+                name_hint = text[:16]
+        elif modality == "image":
+            image_ref = self._extract_image_ref(payload)
+            if image_ref is not None:
+                embedding = self.backend.embed_image([image_ref])[0]
+                name_hint = Path(image_ref.path).stem
+        elif modality == "audio":
+            audio_ref = self._extract_audio_ref(payload)
+            if audio_ref is not None:
+                embedding = self.backend.embed_audio([audio_ref])[0]
+                name_hint = Path(audio_ref.path).stem
+
+        if embedding is None:
+            text = self._extract_text(event)
+            if text:
+                embedding = self.backend.embed_text([text])[0]
+                name_hint = name_hint or text[:16]
 
         if embedding is None:
             return None
 
-        node = self.concept_space.link_observation(
-            event=event,
-            embedding=embedding,
-            name_hint=name_hint,
+        concept = self.concept_space.get_or_create(embedding, name_hint, self.similarity_threshold)
+        self.concept_space.link_observation(
+            concept,
+            {"modality": modality, "event_id": event.id, "payload_keys": list(payload.keys()) if isinstance(payload, dict) else []},
+            embedding,
         )
-        return node
+        event.embedding = list(embedding)
+        event.meta.setdefault("concept_id", str(concept.id))
+        return concept
 
-    # --------------------------------------------------------------------- #
-    # 文本-图像对齐辅助函数
-    # --------------------------------------------------------------------- #
-
-    def align_pair(
-        self,
-        text: str,
-        image_ref: ImageRef,
-    ) -> tuple[ConceptNode, float, float]:
-        """对齐一对文本-图像样本，并返回概念及两种模态的相似度估计。
-
-        返回：
-            (concept, sim_text, sim_image)
+    def align_pair(self, text: str, image_ref: ImageRef) -> tuple[ConceptNode, float, float]:
+        """
+        用于 demo/testing：对齐一条文本 + 一张图片，返回概念和双方相似度信息。
         """
 
-        text_embedding = self.backend.embed_text([text])[0]
-        image_embedding = self.backend.embed_image([image_ref])[0]
+        text_vec = self.backend.embed_text([text])[0]
+        image_vec = self.backend.embed_image([image_ref])[0]
+        concept = self.concept_space.get_or_create(text_vec, text[:16], self.similarity_threshold)
+        self.concept_space.link_observation(concept, {"modality": "text"}, text_vec)
+        self.concept_space.link_observation(concept, {"modality": "image"}, image_vec)
 
-        # 使用文本 embedding 作为概念锚点
-        dummy_event = AgentEvent.now(
-            event_type="alignment_pair",
-            payload={
-                "raw": {
-                    "text": text,
-                    "image_meta": {
-                        "path": image_ref.path,
-                        "width": image_ref.width,
-                        "height": image_ref.height,
-                        "meta": dict(image_ref.meta),
-                    },
-                }
-            },
-            source="alignment",
-        )
-
-        concept = self.concept_space.link_observation(
-            event=dummy_event,
-            embedding=text_embedding,
-            name_hint=text[:16],
-        )
-
-        # 计算图像向量与概念中心的相似度
-        from .concepts import _cosine_similarity  # 局部导入避免循环
-
-        sim_text = _cosine_similarity(text_embedding, concept.centroid)
-        sim_image = _cosine_similarity(image_embedding, concept.centroid)
+        sim_text = _cosine_similarity(text_vec, concept.centroid)
+        sim_image = _cosine_similarity(image_vec, concept.centroid)
         return concept, float(sim_text), float(sim_image)
 
 

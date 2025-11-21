@@ -1,43 +1,51 @@
 from __future__ import annotations
 
-from dataclasses import asdict
 from pathlib import Path
-from typing import Any
-
-from me_core.types import AgentEvent, EventKind, EventSource, ImageRef, MultiModalInput
+from typing import Any, List
 
 from .base import BasePerception
-from .processor import encode_to_event
+from ..types import AgentEvent, EventKind, ImageRef
 
 
 class ImagePerception(BasePerception):
-    """图像感知实现（轻量版）。
-
-    职责：
-        - 接收本地路径或 ImageRef；
-        - 检查文件是否存在（若为本地路径）；
-        - 将基础信息封装为 MultiModalInput.image_meta，并生成 AgentEvent。
+    """
+    图片感知：目前 R0 版仅记录路径和简单 meta，不做真实像素解析。
     """
 
-    def __init__(self, default_source: str = EventSource.ENVIRONMENT.value) -> None:
+    def __init__(self, default_source: str = "environment") -> None:
         self.default_source = default_source
 
-    def perceive(self, raw_input: Any) -> AgentEvent:
+    def perceive(self, raw_input: Any, **kwargs) -> List[AgentEvent]:
+        source = kwargs.get("source") or self.default_source
+
         if isinstance(raw_input, ImageRef):
-            img_ref = raw_input
+            image_ref = raw_input
         elif isinstance(raw_input, str):
-            path = Path(raw_input)
-            # 若路径不存在，仍然记录原始字符串，交由上层决定是否报错
-            img_ref = ImageRef(path=str(path))
+            image_ref = ImageRef(path=str(Path(raw_input)))
         else:
             raise TypeError("ImagePerception 目前仅支持 str 或 ImageRef 类型输入。")
 
-        mm_input = MultiModalInput(image_meta=asdict(img_ref))
-        event = encode_to_event(mm_input, source=self.default_source)
-        event.source = self.default_source
-        event.kind = EventKind.PERCEPTION
+        path_obj = Path(image_ref.path)
+        exists = path_obj.exists()
+
+        payload = {
+            "image_ref": image_ref,
+            "path": image_ref.path,
+            "exists": exists,
+        }
+        if not exists:
+            payload["error"] = "file_not_found"
+
+        event = AgentEvent.now(
+            event_type=EventKind.PERCEPTION.value,
+            payload=payload,
+            source=source,
+            kind=EventKind.PERCEPTION,
+        )
         event.modality = "image"
-        if isinstance(event.tags, set):
-            event.tags.update({"image"})
-        return event
+        event.tags.update({"image"})
+        if not exists:
+            event.tags.add("missing")
+
+        return [event]
 

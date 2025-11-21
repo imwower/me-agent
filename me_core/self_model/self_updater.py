@@ -83,17 +83,19 @@ def update_from_event(state: SelfState, event: AgentEvent) -> SelfState:
     if kind == "perception":
         text_snippet = ""
         raw = payload.get("raw") if isinstance(payload, dict) else None
-        if isinstance(raw, dict):
-            # 记录已接触模态与能力标签
-            if event.modality:
-                new_state.modalities_seen.add(event.modality)
-                if event.modality == "text":
-                    new_state.capability_tags.add("text_perception")
-                elif event.modality == "image":
-                    new_state.capability_tags.add("image_perception")
-                elif event.modality == "audio":
-                    new_state.capability_tags.add("audio_perception")
 
+        # 记录已接触模态与能力标签
+        if event.modality:
+            new_state.modalities_seen.add(event.modality)
+            new_state.seen_modalities.add(event.modality)
+            if event.modality == "text":
+                new_state.capability_tags.add("text_perception")
+            elif event.modality == "image":
+                new_state.capability_tags.add("image_perception")
+            elif event.modality == "audio":
+                new_state.capability_tags.add("audio_perception")
+
+        if isinstance(raw, dict):
             text_value = raw.get("text")
             if isinstance(text_value, str) and text_value:
                 # 只截取前若干字符，避免活动描述过长
