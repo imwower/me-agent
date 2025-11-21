@@ -62,9 +62,14 @@ def create_embedding_backend_from_config(config: AgentConfig | None = None) -> E
     use_dummy = True
     module_name: str | None = None
     factory_name = "create_backend"
+    kwargs: dict = {}
     if config is not None:
         use_dummy = bool(getattr(config, "use_dummy_embedding", True))
         module_name = getattr(config, "embedding_backend_module", None)
+        try:
+            kwargs = dict(getattr(config, "embedding_backend_kwargs", {}) or {})
+        except Exception:
+            kwargs = {}
 
     if use_dummy:
         return DummyEmbeddingBackend()
@@ -74,7 +79,7 @@ def create_embedding_backend_from_config(config: AgentConfig | None = None) -> E
             module = importlib.import_module(str(module_name))
             factory = getattr(module, factory_name, None)
             if callable(factory):
-                backend = factory(config)  # type: ignore[misc]
+                backend = factory(kwargs or config)  # type: ignore[misc]
                 if backend is not None:
                     return backend
         except Exception:

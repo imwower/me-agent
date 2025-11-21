@@ -169,6 +169,12 @@ python scripts/demo_cli_agent.py
 - 可视化：`scripts/view_timeline.py` 查看事件时间线，`scripts/view_memory.py` 查看持久化记忆。
 - 配置与 backend 插拔：`AgentConfig` 支持切换 Dummy/外部 embedding backend，开关好奇/内省等行为。
 
+## R4: Real Backends & Teachers & Multimodal Scenarios
+
+- 真实多模态后端扩展：在 `me_ext/backends/real_backend.py` 实现 `RealEmbeddingBackend`，通过 `embedding_backend_module` 动态加载。
+- 外部 Teacher：`me_ext/teachers/real_teacher.py` 支持 HTTP/CLI 调用外部 LLM，返回 PolicyPatch 改写策略。
+- 多模态场景：新增图片对齐/图文一致性 Scenario，评估真实 backend 表现。
+- 演化实验：`scripts/run_evolution_with_teachers.py --experiment-config experiments/r4_real_backend_and_teacher.json` 结合真实 backend + Teacher 跑简单演化并输出报告。
 ### 下载 CIFAR-100 数据集（Python 版）
 
 用于 `scripts/train_cifar100_cnn.py` 的示例数据，可直接用仓库脚本下载并解压到 `data/cifar100`：

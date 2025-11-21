@@ -7,7 +7,7 @@ from me_core.agent import SimpleAgent
 from .types import Scenario, TaskResult, TaskStep
 
 
-def _step_success(reply: str, expected_keywords: List[str], case_insensitive: bool = True) -> float:
+def _step_success(reply: str, expected_keywords: List[str], *, mode: str = "contains_any", case_insensitive: bool = True) -> float:
     if not expected_keywords:
         return 1.0 if reply else 0.0
     text = reply or ""
@@ -16,8 +16,15 @@ def _step_success(reply: str, expected_keywords: List[str], case_insensitive: bo
         expected = [kw.lower() for kw in expected_keywords]
     else:
         expected = expected_keywords
-    hits = sum(1 for kw in expected if kw and kw in text)
-    return hits / len(expected) if expected else 0.0
+
+    if mode == "not_contains":
+        misses = sum(1 for kw in expected if kw and kw not in text)
+        return 1.0 if misses == len(expected) else 0.0
+    elif mode == "exact":
+        return 1.0 if text.strip() == "".join(expected).strip() else 0.0
+    else:  # contains_any/default
+        hits = sum(1 for kw in expected if kw and kw in text)
+        return hits / len(expected) if expected else 0.0
 
 
 def run_scenario(agent: SimpleAgent, scenario: Scenario) -> TaskResult:
@@ -30,7 +37,8 @@ def run_scenario(agent: SimpleAgent, scenario: Scenario) -> TaskResult:
 
     for step in scenario.steps:
         reply = agent.step(step.user_input, image_path=step.image_path)
-        score = _step_success(reply or "", step.expected_keywords or [], case_insensitive)
+        mode = step.eval_config.get("mode", "contains_any") if step.eval_config else "contains_any"
+        score = _step_success(reply or "", step.expected_keywords or [], mode=mode, case_insensitive=case_insensitive)
         weight = step.weight
         total_weight += weight
         total_score += score * weight

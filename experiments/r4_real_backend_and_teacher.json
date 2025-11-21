@@ -1,0 +1,24 @@
+{
+  "backend": {
+    "use_dummy_embedding": false,
+    "embedding_backend_module": "me_ext.backends.real_backend",
+    "embedding_backend_kwargs": {
+      "model_name": "demo_clip",
+      "device": "cpu",
+      "dim": 128
+    }
+  },
+  "teacher": {
+    "use_real_teacher": true,
+    "teacher_module": "me_ext.teachers.real_teacher",
+    "teacher_kwargs": {
+      "mode": "cli",
+      "command": "cat"
+    }
+  },
+  "population": {
+    "initial_size": 1,
+    "num_generations": 1,
+    "scenarios": ["self_intro", "image_alignment_basic", "image_vs_text_consistency"]
+  }
+}

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional
 class AgentConfig:
     use_dummy_embedding: bool = True
     embedding_backend_module: Optional[str] = None
+    embedding_backend_kwargs: Dict[str, Any] = field(default_factory=dict)
     enable_curiosity: bool = True
     enable_introspection: bool = True
     episode_window: int = 1

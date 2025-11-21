@@ -10,6 +10,7 @@ class TaskStep:
     image_path: Optional[str] = None
     expected_keywords: Optional[List[str]] = None
     weight: float = 1.0
+    eval_config: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

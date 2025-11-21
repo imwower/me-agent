@@ -44,6 +44,34 @@ def default_scenarios() -> List[Scenario]:
             eval_config={"case_insensitive": True},
         ),
         Scenario(
+            id="image_alignment_basic",
+            name="图片对齐基础",
+            description="给定图片和问题，测试概念对齐与回答。",
+            steps=[
+                TaskStep(
+                    user_input="这张图片里大概是什么？",
+                    image_path="examples/apple.png",
+                    expected_keywords=["苹果", "水果"],
+                    eval_config={"mode": "contains_any"},
+                )
+            ],
+            eval_config={"case_insensitive": True},
+        ),
+        Scenario(
+            id="image_vs_text_consistency",
+            name="图文一致性检查",
+            description="文本暗示猫，图片是猫，问是不是狗，期待否定或纠正。",
+            steps=[
+                TaskStep(
+                    user_input="我给你一张有猫的图片，这张图片里的动物是狗吗？",
+                    image_path="examples/cat.png",
+                    expected_keywords=["不", "猫", "不是狗"],
+                    eval_config={"mode": "contains_any"},
+                )
+            ],
+            eval_config={"case_insensitive": True},
+        ),
+        Scenario(
             id="multimodal_hint",
             name="多模态提示",
             description="给出图片路径并询问，期待模型提示需要真实图片理解。",
