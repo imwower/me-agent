@@ -7,14 +7,27 @@
 - MultimodalQATool：多模态问答占位工具，实现“图片+文本问题→文本回答”的统一接口。
 """
 
-from .base import BaseTool, EchoTool, TimeTool, MultimodalQATool  # noqa: F401
+from .base import (  # noqa: F401
+    BaseTool,
+    EchoTool,
+    FileReadTool,
+    HttpGetTool,
+    MultimodalQATool,
+    SelfDescribeTool,
+    TimeTool,
+    ToolSpec,
+)
 from .registry import ToolInfo, ToolRegistry  # noqa: F401
 from .executor_stub import ToolExecutorStub  # noqa: F401
 
 __all__ = [
     "BaseTool",
+    "ToolSpec",
     "EchoTool",
     "TimeTool",
+    "HttpGetTool",
+    "FileReadTool",
+    "SelfDescribeTool",
     "MultimodalQATool",
     "ToolInfo",
     "ToolRegistry",

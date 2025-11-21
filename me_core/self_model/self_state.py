@@ -30,6 +30,8 @@ class SelfState:
     capability_tags: Set[str] = field(default_factory=set)
     modalities_seen: Set[str] = field(default_factory=set)
     seen_modalities: Set[str] = field(default_factory=set)
+    last_actions: List[str] = field(default_factory=list)
+    last_step: int = 0
 
     def __post_init__(self) -> None:
         # 确保新老字段保持同步，避免两套记录分叉
@@ -62,6 +64,8 @@ class SelfState:
         data["capability_tags"] = list(self.capability_tags)
         data["modalities_seen"] = list(self.modalities_seen)
         data["seen_modalities"] = list(self.seen_modalities)
+        data["last_actions"] = list(self.last_actions)
+        data["last_step"] = int(self.last_step)
         return data
 
     @classmethod
@@ -85,6 +89,8 @@ class SelfState:
             seen_modalities=set(
                 data.get("seen_modalities", []) or data.get("modalities_seen", []) or []
             ),
+            last_actions=list(data.get("last_actions", []) or []),
+            last_step=int(data.get("last_step", 0) or 0),
         )
 
 

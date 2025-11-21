@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, TYPE_CHECKING
 
 from me_core.types import AgentEvent
 
 from ..drives.base import Intent
 from ..self_model.base import BaseSelfModel
+
+if TYPE_CHECKING:
+    from me_core.learning import SimpleLearner
+    from me_core.world_model import SimpleWorldModel
 
 
 class BaseDialoguePolicy(ABC):
@@ -20,9 +24,11 @@ class BaseDialoguePolicy(ABC):
     @abstractmethod
     def generate_reply(
         self,
+        events: List[AgentEvent],
         intent: Intent,
+        world: "SimpleWorldModel",
         self_model: BaseSelfModel,
-        recent_events: List[AgentEvent],
+        learner: "SimpleLearner",
     ) -> str | None:
         """根据意图生成一条中文回复。
 
@@ -41,22 +47,19 @@ class RuleBasedDialoguePolicy(BaseDialoguePolicy):
 
     def generate_reply(
         self,
+        events: List[AgentEvent],
         intent: Intent,
+        world: "SimpleWorldModel",
         self_model: BaseSelfModel,
-        recent_events: List[AgentEvent],
+        learner: "SimpleLearner",
     ) -> str | None:
-        # Idle / reflect 意图默认不回复，除非 extra 中显式要求
-        if intent.kind in {"idle", "reflect"} and not intent.extra.get(
-            "force_reply"
-        ):
+        # stay_silent 默认不回复
+        if intent.kind == "stay_silent":
             return None
 
-        self_desc = self_model.describe()
-        state = self_model.get_state()
-
-        # 从最近事件中抽取一条最新的用户文本，便于“复述用户说了什么”
+        # 从最近事件中抽取最新文本
         last_user_text = ""
-        for e in reversed(recent_events):
+        for e in reversed(events):
             payload = e.payload or {}
             raw = payload.get("raw")
             if isinstance(raw, dict):
@@ -65,50 +68,48 @@ class RuleBasedDialoguePolicy(BaseDialoguePolicy):
                     last_user_text = text.strip()
                     break
 
+        self_desc = self_model.describe_self(world_model=world)
+
+        if intent.kind == "reflect_self":
+            return self_model.describe_self(world_model=world)
+
+        if intent.kind == "inspect_world":
+            recent = world.recent_events(5)
+            concept_lines: List[str] = []
+            top_concepts = world.top_concepts(3)
+            if top_concepts:
+                concept_lines.append(
+                    "概念热点：" + "；".join(f"{c.name}({s.count})" for c, s in top_concepts)
+                )
+            events_line = "最近事件：" + "；".join(
+                f"{t.step}:{t.event.event_type}" for t in recent
+            ) if recent else "最近事件：暂无"
+            return f"我想回顾一下外部信息。{events_line}。" + (" ".join(concept_lines) if concept_lines else "")
+
+        if intent.kind == "curiosity":
+            target = intent.extra.get("concept_name") if intent.extra else None
+            preferred = intent.preferred_modality or "更多信息"
+            return f"我对「{target or '这个概念'}」很好奇，想获取{preferred}，以后有机会再进一步理解。"
+
         parts: list[str] = []
 
         if last_user_text:
             parts.append(f"你刚才说：{last_user_text}")
 
-        # 针对“好奇/多模态覆盖”意图，主动提出需求
-        if intent.extra.get("reason") == "curiosity_multimodal":
-            target = intent.extra.get("concept_name") or intent.extra.get("concept_id") or "这个概念"
-            parts.append(
-                f"【我想】最近反复遇到「{target}」但只有单一模态信息。"
-                "能否提供相关的图片或更多描述，帮我丰富理解？"
-            )
-
-        # 针对“你会不会看图/理解图片”等问题给出更具象的回答
-        lower = last_user_text.lower()
-        if any(
-            kw in lower
-            for kw in ("看图", "看图片", "理解图片", "图像", "图片", "image", "picture")
-        ):
-            if "image_perception" in state.capability_tags:
-                parts.append(
-                    "【我想】目前我已经具备基础的图像感知与概念对齐能力，"
-                    "可以接收图片路径并在内部的概念空间中为它建立锚点（当前仍使用占位式向量）。"
-                )
-            else:
-                parts.append(
-                    "【我想】目前我的主要能力还是文本理解，对图片只能记录路径和少量元信息，"
-                    "还没有真正的视觉理解能力，但架构上已经为未来扩展预留了位置。"
-                )
-
         if intent.explanation:
             parts.append(f"【我想】{intent.explanation}")
         else:
-            parts.append("【我想】理解你的输入，并结合自己的状态做出回应。")
+            parts.append("【我想】结合世界与自我状态做出回应。")
 
         if intent.kind == "call_tool" and intent.target_tool:
-            parts.append(
-                f"【我要】尝试调用工具「{intent.target_tool}」，帮助我更好地回答或行动。"
-            )
-        elif intent.kind == "reflect":
-            parts.append("【我要】先进行一点自我反思，再看接下来该怎么做。")
+            tool_stats = learner.tool_stats.get(intent.target_tool)
+            hint = ""
+            if tool_stats and tool_stats.call_count:
+                rate = tool_stats.success_count / tool_stats.call_count if tool_stats.call_count else 0.0
+                hint = f"（历史成功率约 {rate:.0%}）"
+            parts.append(f"【我要】尝试调用工具「{intent.target_tool}」{hint}，再把结果告诉你。")
         else:
-            parts.append("【我要】直接根据当前的理解来回复你。")
+            parts.append("【我要】直接回答你的问题。")
 
         parts.append(f"【我做】{self_desc}")
-
         return " ".join(parts)

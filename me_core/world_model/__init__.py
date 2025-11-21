@@ -5,10 +5,11 @@
 - SimpleWorldModel：基于内存事件历史的简易世界模型实现。
 """
 
-from .base import BaseWorldModel, SimpleWorldModel  # noqa: F401
+from .base import BaseWorldModel, SimpleWorldModel, TimedEvent, ConceptStats  # noqa: F401
 
 __all__ = [
     "BaseWorldModel",
     "SimpleWorldModel",
+    "TimedEvent",
+    "ConceptStats",
 ]
-

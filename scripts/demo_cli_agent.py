@@ -27,7 +27,7 @@ from me_core.event_stream import EventStream
 from me_core.learning import SimpleLearner
 from me_core.perception import TextPerception
 from me_core.self_model import SimpleSelfModel
-from me_core.tools import EchoTool, TimeTool
+from me_core.tools import EchoTool, FileReadTool, HttpGetTool, SelfDescribeTool, TimeTool
 from me_core.world_model import SimpleWorldModel
 
 
@@ -51,6 +51,9 @@ def build_default_agent() -> SimpleAgent:
     tools = {
         "echo": EchoTool(),
         "time": TimeTool(),
+        "http_get": HttpGetTool(),
+        "file_read": FileReadTool(),
+        "self_describe": SelfDescribeTool(self_model=self_model, world_model=world_model),
     }
     learner = SimpleLearner()
     dialogue_policy = RuleBasedDialoguePolicy()
@@ -107,4 +110,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

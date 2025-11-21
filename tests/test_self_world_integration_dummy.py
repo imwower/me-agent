@@ -24,15 +24,17 @@ class SelfWorldIntegrationDummyTestCase(unittest.TestCase):
         )
         world.concept_space = concept_space
 
+        world.advance_step()
         text_event = TextPerception(split_sentences=False).perceive("测试概念")[0]
         concept_text = aligner.align_event(text_event)
-        world.observe_event(text_event, concept_text)
-        self_model.observe_event(text_event)
+        world.append_event(text_event)
+        self_model.observe_event(text_event, step=world.current_step)
 
         image_event = ImagePerception().perceive("dummy.png")[0]
         concept_image = aligner.align_event(image_event)
-        world.observe_event(image_event, concept_image)
-        self_model.observe_event(image_event)
+        world.advance_step()
+        world.append_event(image_event)
+        self_model.observe_event(image_event, step=world.current_step)
 
         self.assertIn("text", self_model.get_state().seen_modalities)
         self.assertIn("image", self_model.get_state().seen_modalities)
@@ -43,7 +45,7 @@ class SelfWorldIntegrationDummyTestCase(unittest.TestCase):
 
         modalities_union: set[str] = set()
         for stats in world.concept_stats.values():
-            modalities_union.update(stats.modalities)
+            modalities_union.update(stats.modalities.keys())
 
         self.assertIn("text", modalities_union)
         self.assertIn("image", modalities_union)

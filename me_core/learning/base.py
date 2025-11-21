@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, TYPE_CHECKING
 
 from me_core.types import AgentEvent
@@ -11,6 +11,18 @@ if TYPE_CHECKING:  # 仅供类型检查使用，避免运行时循环依赖
     from me_core.self_model.base import BaseSelfModel
     from me_core.tools.base import BaseTool
     from me_core.world_model.base import BaseWorldModel
+
+
+@dataclass(slots=True)
+class ToolUsageStats:
+    call_count: int = 0
+    success_count: int = 0
+
+
+@dataclass(slots=True)
+class IntentOutcomeStats:
+    tried: int = 0
+    succeeded: int = 0
 
 
 class BaseLearner(ABC):
@@ -48,6 +60,8 @@ class SimpleLearner(BaseLearner):
     observed_event_count: int = 0
     concept_modalities: Dict[str, set[str]] = None  # type: ignore[assignment]
     concept_counts: Dict[str, int] = None  # type: ignore[assignment]
+    tool_stats: Dict[str, ToolUsageStats] = field(default_factory=dict)
+    intent_stats: Dict[str, IntentOutcomeStats] = field(default_factory=dict)
 
     def observe(self, events: List[AgentEvent]) -> None:
         if self.concept_modalities is None:
@@ -66,6 +80,19 @@ class SimpleLearner(BaseLearner):
                 mods = self.concept_modalities.setdefault(cid_str, set())
                 mods.add(e.modality)
 
+    def observe_tool_result(self, tool_name: str, success: bool) -> None:
+        stats = self.tool_stats.setdefault(tool_name, ToolUsageStats())
+        stats.call_count += 1
+        if success:
+            stats.success_count += 1
+
+    def observe_intent_outcome(self, intent, success: bool) -> None:
+        name = getattr(intent, "kind", "unknown_intent")
+        stats = self.intent_stats.setdefault(name, IntentOutcomeStats())
+        stats.tried += 1
+        if success:
+            stats.succeeded += 1
+
     def update_models(
         self,
         world_model: "BaseWorldModel",
@@ -82,3 +109,18 @@ class SimpleLearner(BaseLearner):
 
         # 为了避免“未使用参数”告警，这里简单访问一次参数。
         _ = (world_model, self_model, drive_system, tools)
+
+    def get_tool_recommendations(self) -> List[tuple[str, ToolUsageStats]]:
+        """
+        返回按成功率/调用次数排序的工具列表。
+        """
+
+        items = list(self.tool_stats.items())
+        items.sort(
+            key=lambda item: (
+                (item[1].success_count / item[1].call_count) if item[1].call_count else 0.0,
+                item[1].call_count,
+            ),
+            reverse=True,
+        )
+        return items

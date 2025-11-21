@@ -5,12 +5,18 @@
 - BaseLearner / SimpleLearner：面向 Agent 的学习接口与简易实现。
 """
 
-from .base import BaseLearner, SimpleLearner  # noqa: F401
+from .base import (  # noqa: F401
+    BaseLearner,
+    IntentOutcomeStats,
+    SimpleLearner,
+    ToolUsageStats,
+)
 from .learning_manager import LearningManager  # noqa: F401
 
 __all__ = [
     "BaseLearner",
+    "ToolUsageStats",
+    "IntentOutcomeStats",
     "SimpleLearner",
     "LearningManager",
 ]
-

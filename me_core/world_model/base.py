@@ -30,7 +30,16 @@ class BaseWorldModel(ABC):
 @dataclass
 class ConceptStats:
     count: int = 0
-    modalities: Set[str] = field(default_factory=set)
+    modalities: Dict[str, int] = field(default_factory=dict)
+    last_seen_step: int = -1
+
+
+@dataclass
+class TimedEvent:
+    """带时间步的事件记录，用于世界模型的时间线。"""
+
+    step: int
+    event: AgentEvent
 
 
 @dataclass
@@ -48,6 +57,9 @@ class SimpleWorldModel(BaseWorldModel):
     tool_stats: Dict[str, Dict[str, int]] = field(default_factory=dict)
     concept_space: ConceptSpace = field(default_factory=ConceptSpace)
     concept_stats: Dict[ConceptId, ConceptStats] = field(default_factory=dict)
+    timeline_limit: int = 500
+    _timeline: List[TimedEvent] = field(default_factory=list, init=False, repr=False)
+    _current_step: int = field(default=0, init=False, repr=False)
 
     def update(self, events: List[AgentEvent]) -> None:
         """将新事件写入历史，并更新工具统计。"""
@@ -56,7 +68,35 @@ class SimpleWorldModel(BaseWorldModel):
             return
 
         for event in events:
-            self.observe_event(event, None)
+            self.append_event(event)
+
+    def advance_step(self) -> int:
+        """
+        增加一步时间刻度，返回当前 step。
+        """
+
+        self._current_step += 1
+        return self._current_step
+
+    @property
+    def current_step(self) -> int:
+        """返回当前世界模型的步数。"""
+
+        return self._current_step
+
+    def append_event(self, event: AgentEvent) -> None:
+        """
+        将事件追加到时间线，并做基础统计。
+        """
+
+        timed = TimedEvent(step=self._current_step, event=event)
+        self._timeline.append(timed)
+        if self.timeline_limit > 0 and len(self._timeline) > self.timeline_limit:
+            overflow = len(self._timeline) - self.timeline_limit
+            del self._timeline[0:overflow]
+
+        event.meta.setdefault("step", self._current_step)
+        self.observe_event(event, None)
 
     def summarize(self) -> Dict[str, Any]:
         """生成世界模型的摘要信息。
@@ -89,14 +129,15 @@ class SimpleWorldModel(BaseWorldModel):
         for cid, stats in self.concept_stats.items():
             concept_summary[str(cid)] = {
                 "count": stats.count,
-                "modalities": sorted(stats.modalities),
+                "modalities": dict(stats.modalities),
+                "last_seen_step": stats.last_seen_step,
             }
 
         return {
             "events": events_summary,
             "tools": tools_summary,
             "concepts": concept_summary,
-        }
+            }
 
     # 新增：概念相关观测接口 --------------------------------------------------------
 
@@ -134,7 +175,9 @@ class SimpleWorldModel(BaseWorldModel):
         if concept_node is not None:
             stats = self.concept_stats.setdefault(concept_node.id, ConceptStats())
             stats.count += 1
-            stats.modalities.add(event.modality or "unknown")
+            modality = event.modality or "unknown"
+            stats.modalities[modality] = int(stats.modalities.get(modality, 0)) + 1
+            stats.last_seen_step = self._current_step
 
     def get_concept_stats(self, concept: ConceptNode) -> ConceptStats | None:
         return self.concept_stats.get(concept.id)
@@ -153,3 +196,68 @@ class SimpleWorldModel(BaseWorldModel):
                     concepts.append(c)
                     break
         return concepts
+
+    def recent_events(self, max_count: int = 20) -> List[TimedEvent]:
+        """返回最近 max_count 条事件（倒序）。"""
+
+        if max_count <= 0:
+            return []
+        return list(reversed(self._timeline[-max_count:]))
+
+    def query_events(
+        self,
+        modality: Optional[str] = None,
+        tag: Optional[str] = None,
+        max_count: int = 50,
+    ) -> List[TimedEvent]:
+        """按模态/tag 过滤最近的事件。"""
+
+        results: List[TimedEvent] = []
+        for timed in reversed(self._timeline):
+            if modality and timed.event.modality != modality:
+                continue
+            if tag and tag not in timed.event.tags:
+                continue
+            results.append(timed)
+            if len(results) >= max_count:
+                break
+        return results
+
+    def top_concepts(self, top_k: int = 10) -> List[tuple[ConceptNode, ConceptStats]]:
+        """按出现次数排序的 top_k 概念。"""
+
+        ordered = sorted(
+            self.concept_stats.items(),
+            key=lambda item: item[1].count,
+            reverse=True,
+        )
+        concepts: List[tuple[ConceptNode, ConceptStats]] = []
+        for cid, stats in ordered[:top_k]:
+            node = next(
+                (c for c in self.concept_space.all_concepts() if str(c.id) == str(cid)),
+                None,
+            )
+            if node is not None:
+                concepts.append((node, stats))
+        return concepts
+
+    def concepts_by_modality(
+        self, modality: str, top_k: int = 10
+    ) -> List[tuple[ConceptNode, ConceptStats]]:
+        """在指定模态中最常见的概念。"""
+
+        filtered = [
+            (cid, stats)
+            for cid, stats in self.concept_stats.items()
+            if stats.modalities.get(modality)
+        ]
+        ordered = sorted(filtered, key=lambda item: item[1].modalities.get(modality, 0), reverse=True)
+        results: List[tuple[ConceptNode, ConceptStats]] = []
+        for cid, stats in ordered[:top_k]:
+            node = next(
+                (c for c in self.concept_space.all_concepts() if str(c.id) == str(cid)),
+                None,
+            )
+            if node is not None:
+                results.append((node, stats))
+        return results

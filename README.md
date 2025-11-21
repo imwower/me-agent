@@ -100,16 +100,18 @@ me-agent 是一个以“自我驱动的智能体”为核心隐喻的原型系�
   - `event_stream.py`：内存中的事件流与事件历史工具；
   - `perception/`：文本/图片感知桩，`TextPerception` 拆分文本事件，`ImagePerception` 记录图片路径与元信息；
   - `alignment/`：概念空间 + Dummy 多模态对齐（R0 占位版，不依赖真实模型）；
-  - `world_model/`：`SimpleWorldModel` 基于事件历史做简单统计；
-  - `self_model/`：`SelfState` + `SimpleSelfModel`，用于描述与总结“我是谁 / 我在做什么”；
-  - `drives/`：驱动力向量与更新规则，以及基于最近事件给出 `Intent` 的 `SimpleDriveSystem`；
-  - `tools/`：工具元信息、注册表以及 `EchoTool` / `TimeTool` 等简单工具；
-  - `learning/`：`SimpleLearner` / `LearningManager`，用于观察事件并进行原型级学习；
-  - `dialogue/`：对话规划器与 `RuleBasedDialoguePolicy`，将意图转为中文自然语言；
-  - `agent/`：`StateStore` / 旧版 `run_once` 主循环，以及新的 `SimpleAgent` Agent 框架。
+  - `world_model/`：`SimpleWorldModel` 维护事件时间线 + 概念记忆，支持按模态/标签查询最近事件；
+  - `self_model/`：`SelfState` + `SimpleSelfModel`，记录已见模态、能力标签、最近行动并给出自述；
+  - `drives/`：驱动力向量与更新规则，`SimpleDriveSystem` 输出带优先级的意图（回复/调用工具/好奇/自省）；
+  - `tools/`：工具协议与注册表，内置 `EchoTool` / `TimeTool` / `HttpGetTool` / `FileReadTool` / `SelfDescribeTool` 等标准库级 stub；
+  - `learning/`：`SimpleLearner` / `LearningManager`，观察工具成功率与意图结果的轻量学习器；
+  - `dialogue/`：对话规划器与 `RuleBasedDialoguePolicy`，结合世界/自我/学习信息生成“我想 / 我要 / 我做”式回复；
+  - `agent/`：`StateStore` / 旧版 `run_once` 主循环，以及新的 `SimpleAgent`（清晰 step 流程、可选 debug/timeline dump）与多 Agent 脚手架。
 - `scripts/`
   - `demo_cli_agent.py`：基于 `SimpleAgent` 的命令行 demo（推荐从这里体验最小闭环）；
   - `demo_multimodal_dummy.py`：使用 Dummy 对齐展示“文本/图片 → 概念空间 → Agent 回复”的占位式多模态 demo；
+  - `demo_multi_agent.py`：两个 `SimpleAgent` 轮流对话的多 Agent 示例；
+  - `dump_timeline.py`：读取 JSONL 事件日志并打印时间线；
   - 其他脚本：演示自我学习循环、驱动力调整和状态查看等。
 - 说明：当前多模态对齐为 R0 Dummy 版本，用于打通结构，后续会接入真实模型。
 - `tests/`

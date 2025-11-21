@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, Optional, List
 
 from me_core.event_stream import EventStream
@@ -18,6 +21,7 @@ from ..perception.base import BasePerception
 from ..self_model import BaseSelfModel
 from ..tools import BaseTool
 from ..world_model import BaseWorldModel
+import me_core.logging as agent_logging
 
 
 class BaseAgent:
@@ -80,6 +84,8 @@ class SimpleAgent(BaseAgent):
     learner: BaseLearner
     dialogue_policy: BaseDialoguePolicy
     event_stream: EventStream = field(default_factory=EventStream)
+    logger: Optional[logging.Logger] = field(default=None, repr=False)
+    timeline_path: Optional[Path] = field(default=None, repr=False)
     image_perception: Optional[BasePerception] = field(default=None, init=False, repr=False)
     concept_space: ConceptSpace = field(default_factory=ConceptSpace, init=False, repr=False)
     embedding_backend: DummyEmbeddingBackend = field(
@@ -95,6 +101,7 @@ class SimpleAgent(BaseAgent):
 
     # 多模态对齐器（默认使用 DummyEmbeddingBackend + 内部 ConceptSpace）
     aligner: Optional[MultimodalAligner] = field(default=None, init=False)
+    _local_step: int = field(default=0, init=False, repr=False)
 
     def __post_init__(self) -> None:
         # 设定默认的多模态对齐组件与图谱
@@ -126,64 +133,107 @@ class SimpleAgent(BaseAgent):
 
         # 预先标记 Dummy 多模态对齐能力标签
         try:
-            self.self_model.get_state().capability_tags.add("dummy_multimodal_alignment")
+            if hasattr(self.self_model, "register_capability_tag"):
+                self.self_model.register_capability_tag("dummy_multimodal_alignment")  # type: ignore[attr-defined]
+            else:
+                self.self_model.get_state().capability_tags.add("dummy_multimodal_alignment")
         except Exception:
             pass
 
-    def _register_event(self, event: AgentEvent, concept: Optional[Any] = None) -> None:
+        if self.logger is None:
+            try:
+                self.logger = agent_logging.setup_logger()
+            except Exception:
+                self.logger = None
+
+        if self.timeline_path is not None and not isinstance(self.timeline_path, Path):
+            self.timeline_path = Path(self.timeline_path)  # type: ignore[assignment]
+
+    def _next_step(self) -> int:
+        """获取下一个 step 编号。"""
+
+        advancer = getattr(self.world_model, "advance_step", None)
+        if callable(advancer):
+            try:
+                return int(advancer())
+            except Exception:
+                pass
+        self._local_step += 1
+        return self._local_step
+
+    def _register_event(self, event: AgentEvent, step: int, concept: Optional[Any] = None) -> None:
         """集中处理事件写入、世界/自我模型更新与日志。"""
 
         event.meta.setdefault("agent_id", self.agent_id)
         if self.population_id is not None:
             event.meta.setdefault("population_id", self.population_id)
+        event.meta.setdefault("step", step)
 
-        self.event_stream.append_event(event)
-        self.event_stream.log_event(event)
-
-        observer = getattr(self.world_model, "observe_event", None)
-        if callable(observer):
-            observer(event, concept)
+        if hasattr(self.world_model, "append_event"):
+            self.world_model.append_event(event)  # type: ignore[attr-defined]
+        elif hasattr(self.world_model, "observe_event"):
+            self.world_model.observe_event(event, concept)  # type: ignore[attr-defined]
 
         if hasattr(self.self_model, "observe_event"):
-            self.self_model.observe_event(event)  # type: ignore[attr-defined]
+            self.self_model.observe_event(event, step=step)  # type: ignore[arg-type]
         else:
-            self.self_model.update_from_events([event])
+            try:
+                self.self_model.update_from_events([event], step=step)  # type: ignore[arg-type]
+            except TypeError:
+                self.self_model.update_from_events([event])  # type: ignore[arg-type]
+
+        self.event_stream.append_event(event)
+        if self.timeline_path is not None:
+            try:
+                with Path(self.timeline_path).open("a", encoding="utf-8") as f:
+                    f.write(json.dumps(event.to_dict(), ensure_ascii=False) + "\n")
+            except Exception:
+                pass
+        if self.logger:
+            try:
+                self.logger.debug(event.pretty())
+            except Exception:
+                pass
+        else:
+            self.event_stream.log_event(event)
 
         if concept is not None:
             try:
-                self.self_model.get_state().capability_tags.add("dummy_multimodal_alignment")
+                if hasattr(self.self_model, "register_capability_tag"):
+                    self.self_model.register_capability_tag("dummy_multimodal_alignment")  # type: ignore[attr-defined]
+                else:
+                    self.self_model.get_state().capability_tags.add("dummy_multimodal_alignment")
             except Exception:
                 pass
 
-    def step(self, raw_input: Optional[Any], image_path: Optional[str] = None) -> Optional[str]:
-        """执行一次 Agent 的单步循环。
+    def step(
+        self,
+        raw_input: Optional[Any],
+        image_path: Optional[str] = None,
+        debug: bool = False,
+    ) -> Optional[str]:
+        """执行一次 Agent 的单步循环。"""
 
-        流程：
-            1）raw_input → perception → AgentEvent（感知事件）；
-            2）事件写入 event_stream / world_model / self_model；
-            3）drives.decide_intent 基于当前状态 + 最近事件给出 Intent；
-            4）若 Intent 需要调用工具，则构造 ToolCall / ToolResult 事件并写入；
-            5）dialogue_policy 基于 Intent + 自我描述 + 最近事件生成回复；
-            6）learner.observe 观察本轮事件，为未来学习留下接口。
-        """
-
+        step_id = self._next_step()
         step_events: List[AgentEvent] = []
 
-        # 1) 感知阶段：将外部输入转为统一事件
+        # 1) world_model 已前进一步，感知阶段
         if raw_input is not None:
-            print(f"[感知] 收到用户输入：{raw_input}")  # noqa: T201
+            if self.logger:
+                self.logger.info("[感知] 收到输入: %s", raw_input)
             perceived = self.perception.perceive(raw_input)
             perceived_events = [perceived] if isinstance(perceived, AgentEvent) else list(perceived)
             for ev in perceived_events:
                 concept = self.aligner.align_event(ev) if self.aligner is not None else None
                 step_events.append(ev)
-                self._register_event(ev, concept)
+                self._register_event(ev, step_id, concept)
 
         if image_path is not None and self.image_perception is not None:
             try:
                 image_events = self.image_perception.perceive(image_path)
-            except Exception as exc:  # pragma: no cover - 兼容 demo 输入错误
-                print(f"[感知] 解析图片路径时出错: {exc}")  # noqa: T201
+            except Exception as exc:  # pragma: no cover - demo 兼容路径错误
+                if self.logger:
+                    self.logger.warning("解析图片路径时出错: %s", exc)
                 image_events = []
             image_events_list = (
                 [image_events] if isinstance(image_events, AgentEvent) else list(image_events)
@@ -191,9 +241,9 @@ class SimpleAgent(BaseAgent):
             for ev in image_events_list:
                 concept = self.aligner.align_event(ev) if self.aligner is not None else None
                 step_events.append(ev)
-                self._register_event(ev, concept)
+                self._register_event(ev, step_id, concept)
 
-        # 2) 基于最近事件与当前模型，决策本轮意图
+        # 2) 决策本轮意图
         recent_events = self.event_stream.to_list()
         intent = self.drive_system.decide_intent(
             self_model=self.self_model,
@@ -201,19 +251,19 @@ class SimpleAgent(BaseAgent):
             recent_events=recent_events,
         )
         self.last_intent = intent
+        if debug and self.logger:
+            self.logger.info("[驱动力] intent=%s priority=%s msg=%s", intent.kind, intent.priority, intent.message or intent.explanation)
 
-        print(f"[驱动力] 当前意图：{intent.kind}，原因：{intent.explanation}")  # noqa: T201
-
-        # 3) 如有需要，调用工具执行具体行动
+        # 3) 执行动作（工具调用等）
         tool_result: Optional[ToolResult] = None
+        tool_success: Optional[bool] = None
         if intent.kind == "call_tool" and intent.target_tool:
             tool = self.tools.get(intent.target_tool)
             if tool is not None:
-                # 构造工具调用结构
                 call = ToolCall(
-                    tool_name=tool.name,
+                    tool_name=getattr(tool, "name", intent.target_tool),
                     arguments=dict(intent.extra.get("tool_args") or {}),
-                    call_id=f"{self.agent_id}:tool:{intent.target_tool}:{len(recent_events)}",
+                    call_id=f"{self.agent_id}:tool:{intent.target_tool}:{step_id}",
                 )
                 call_event = AgentEvent.now(
                     event_type=EventKind.TOOL_CALL.value,
@@ -223,36 +273,72 @@ class SimpleAgent(BaseAgent):
                         "arguments": call.arguments,
                     },
                     source="agent_internal",
-                )
-                print(
-                    f"[工具] 准备调用工具 {tool.name}，参数：{call.arguments}"  # noqa: T201
+                    kind=EventKind.TOOL_CALL,
                 )
                 step_events.append(call_event)
-                self._register_event(call_event, None)
+                self._register_event(call_event, step_id, None)
 
-                tool_result = tool.call(call)
+                try:
+                    output = tool.run(call.arguments)  # type: ignore[attr-defined]
+                    tool_success = True
+                    error_msg = None
+                except Exception as exc:  # pragma: no cover - 依赖外部环境的调用异常
+                    output = {"tool_name": getattr(tool, "name", intent.target_tool), "error": str(exc)}
+                    tool_success = False
+                    error_msg = str(exc)
+
+                tool_result = ToolResult(
+                    call_id=call.call_id,
+                    success=bool(tool_success),
+                    output=output,
+                    error=error_msg,
+                )
                 self.last_tool_result = tool_result
+                if hasattr(self.self_model, "register_capability_tag"):
+                    self.self_model.register_capability_tag(f"{tool.name}_tool")  # type: ignore[attr-defined]
+
                 result_event = AgentEvent.now(
                     event_type=EventKind.TOOL_RESULT.value,
                     payload={
                         "kind": EventKind.TOOL_RESULT.value,
-                        "tool_name": tool.name,
-                        "success": tool_result.success,
+                        "tool_name": getattr(tool, "name", intent.target_tool),
+                        "success": tool_success,
+                        "output": output,
+                        "error": error_msg,
                     },
                     source="tool",
+                    kind=EventKind.TOOL_RESULT,
                 )
-                print(f"[工具] 工具 {tool.name} 返回：{tool_result.output}")  # noqa: T201
                 step_events.append(result_event)
-                self._register_event(result_event, None)
+                self._register_event(result_event, step_id, None)
+                self.learner.observe_tool_result(getattr(tool, "name", intent.target_tool), bool(tool_success))
             else:
-                print(  # noqa: T201
-                    f"[工具] 未找到名为 {intent.target_tool} 的工具，将退回为普通回复。"
-                )
+                tool_success = False
+                if self.logger:
+                    self.logger.warning("未找到名为 %s 的工具，将退回为普通回复。", intent.target_tool)
 
-        # 4) 学习阶段：观察本轮产生的事件
+        # 4) 由对话策略根据意图生成最终回复
+        reply = self.dialogue_policy.generate_reply(
+            events=self.event_stream.to_list(),
+            intent=intent,
+            world=self.world_model,
+            self_model=self.self_model,
+            learner=self.learner,
+        )
+
+        if reply:
+            reply_event = AgentEvent.now(
+                event_type=EventKind.DIALOGUE.value,
+                payload={"raw": {"text": reply}, "direction": "outgoing"},
+                source="agent_internal",
+                kind=EventKind.DIALOGUE,
+            )
+            step_events.append(reply_event)
+            self._register_event(reply_event, step_id, None)
+
+        # 5) 学习：观察本轮产生的事件与意图结果
         if step_events:
             self.learner.observe(step_events)
-            # 当前 SimpleLearner 不会主动修改模型，仅作为扩展接口存在
             self.learner.update_models(
                 world_model=self.world_model,
                 self_model=self.self_model,
@@ -260,16 +346,31 @@ class SimpleAgent(BaseAgent):
                 tools=self.tools,
             )
 
-        # 5) 由对话策略根据意图生成最终回复
-        reply = self.dialogue_policy.generate_reply(
-            intent=intent,
-            self_model=self.self_model,
-            recent_events=self.event_stream.to_list(),
-        )
+        intent_success = tool_success if intent.kind == "call_tool" else True
+        self.learner.observe_intent_outcome(intent, bool(intent_success))
 
-        if reply:
+        if debug and self.logger:
+            top_concepts = getattr(self.world_model, "top_concepts", lambda top_k=3: [])(top_k=3)
+            top_names = ", ".join(c.name for c, _ in top_concepts) if top_concepts else "-"
+            self.logger.info(
+                "[调试] step=%s intent=%s reply=%s top_concepts=%s self=%s",
+                step_id,
+                intent.kind,
+                (reply or "无"),
+                top_names,
+                self.self_model.describe_self(world_model=self.world_model),
+            )
+            agent_logging.log_step(
+                self.logger,
+                step=step_id,
+                intent_kind=intent.kind,
+                reply=reply,
+                tool_name=intent.target_tool if intent.kind == "call_tool" else None,
+                tool_success=tool_success,
+                events=step_events,
+            )
+
+        if reply and not self.logger:
             print(f"[对话] 生成回复：{reply}")  # noqa: T201
-        else:
-            print("[对话] 本轮选择保持沉默。")  # noqa: T201
 
         return reply

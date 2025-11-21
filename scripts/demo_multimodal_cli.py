@@ -133,12 +133,12 @@ def main() -> None:
             print(f"[调试] 最近事件: {last_event}")  # noqa: T201
             if concept_id and hasattr(agent.world_model, "concept_stats"):
                 stats = getattr(agent.world_model, "concept_stats", {})
-                concept_info = stats.get(str(concept_id))
+                concept_info = stats.get(str(concept_id)) or stats.get(concept_id)
                 if concept_info:
+                    count = concept_info.count if hasattr(concept_info, "count") else concept_info.get("count")
                     print(  # noqa: T201
                         f"[调试] 对齐到概念: id={concept_id}, "
-                        f"name={concept_info.get('name')}, "
-                        f"count={concept_info.get('count')}"
+                        f"count={count}"
                     )
             if "embeddings" in payload:
                 mods = ", ".join(payload.get("modalities") or [])

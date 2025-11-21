@@ -81,7 +81,7 @@ def _print_step_summary(agent: SimpleAgent, new_events: List) -> None:
             )
             stats = agent.world_model.concept_stats.get(concept.id if concept else concept_id)  # type: ignore[index]
             count = stats.count if stats else 0
-            mods = sorted(stats.modalities) if stats else []
+            mods = sorted(stats.modalities.keys()) if stats and isinstance(stats.modalities, dict) else (sorted(stats.modalities) if stats else [])
             concept_name = concept.name if concept else str(concept_id)
             print(  # noqa: T201
                 f"[ALIGN] {ev.modality} -> concept={concept_name} (id={concept_id}) "
