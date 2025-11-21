@@ -19,13 +19,13 @@ def main() -> None:
         "--model",
         type=Path,
         default=Path("outputs/qwen3_sft_m2"),
-        help="训练好的本地检查点路径。",
+        help="训练好的本地检查点路径（需包含 tokenizer 模型文件或通过 --base 指定基础模型）。",
     )
     parser.add_argument(
         "--base",
         type=str,
-        default=None,
-        help="可选：若本地检查点不存在，使用的基础模型（如 Qwen/Qwen2-0.5B-Instruct）。",
+        default="Qwen/Qwen2-0.5B-Instruct",
+        help="基础模型名称或路径，用于缺失 tokenizer/权重时回退。",
     )
     parser.add_argument(
         "--temperature",
@@ -42,14 +42,15 @@ def main() -> None:
     args = parser.parse_args()
 
     ckpt = args.model
-    base_model = args.base or ckpt
+    base_model = args.base
 
-    if not ckpt.exists() and args.base is None:
-        raise FileNotFoundError(f"找不到检查点 {ckpt}，请通过 --base 指定基础模型或先训练。")
+    load_path = ckpt if ckpt.exists() else base_model
+    if load_path is None:
+        raise FileNotFoundError(f"找不到检查点 {ckpt}，也未提供 --base 基础模型。")
 
-    print(f"[加载模型] {base_model}")
-    tokenizer = AutoTokenizer.from_pretrained(base_model, use_fast=True)
-    model = AutoModelForCausalLM.from_pretrained(base_model)
+    print(f"[加载模型] {load_path}")
+    tokenizer = AutoTokenizer.from_pretrained(load_path, use_fast=True)
+    model = AutoModelForCausalLM.from_pretrained(load_path)
 
     while True:
         try:
