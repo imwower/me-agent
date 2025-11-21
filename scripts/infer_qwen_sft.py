@@ -19,7 +19,7 @@ def main() -> None:
         "--model",
         type=Path,
         default=Path("outputs/qwen3_sft_m2"),
-        help="训练好的本地检查点路径（需包含 tokenizer 模型文件或通过 --base 指定基础模型）。",
+        help="训练好的本地检查点目录（可含多个 checkpoint-* 子目录）。",
     )
     parser.add_argument(
         "--base",
@@ -44,23 +44,24 @@ def main() -> None:
     ckpt = args.model
     base_model = args.base
 
-    # 强制使用微调检查点；若缺失 tokenizer 文件则报错，避免悄然回退基础模型。
-    model_path = ckpt
-    tokenizer_path = ckpt
+    # 选择权重路径：若目录下存在 checkpoint-*，默认取最新一个
+    if not ckpt.exists():
+        raise FileNotFoundError(f"找不到模型检查点目录: {ckpt}")
 
-    if not model_path.exists():
-        raise FileNotFoundError(f"找不到模型检查点: {model_path}")
-    if not (ckpt / "tokenizer.json").exists() and base_model is None:
-        raise FileNotFoundError("检查点缺少 tokenizer 文件，请确保保存完整或通过 --base 指定 tokenizer 来源。")
+    candidate = ckpt
+    ckpts = sorted([p for p in ckpt.iterdir() if p.is_dir() and p.name.startswith("checkpoint-")])
+    if ckpts:
+        candidate = ckpts[-1]
 
-    # 若需要，可单独指定基础 tokenizer，但模型权重必须来自微调检查点
-    tokenizer_load = tokenizer_path if (ckpt / "tokenizer.json").exists() else base_model
-    if tokenizer_load is None:
+    model_path = candidate
+    tokenizer_path = candidate if (candidate / "tokenizer.json").exists() else base_model
+
+    if tokenizer_path is None:
         raise FileNotFoundError("未找到 tokenizer.json，且未提供 --base tokenizer。")
 
     print(f"[加载模型权重] {model_path}")
-    print(f"[加载分词器] {tokenizer_load}")
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_load, use_fast=True)
+    print(f"[加载分词器] {tokenizer_path}")
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, use_fast=True)
     model = AutoModelForCausalLM.from_pretrained(model_path)
 
     while True:
