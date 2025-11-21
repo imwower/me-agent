@@ -175,6 +175,14 @@
 - 已实现 episodic/semantic memory（Jsonl 持久化），场景运行与关键字评估、内省日志生成、实验 runner 及浏览脚本，AgentConfig + backend 插拔点。  
 - 下一步（R3 展望）：接入真实多模态/LLM backend，优化评估指标与评分、丰富场景集，加入更智能的 episode 摘要与自我改进策略。
 
+## R3: Teachers, Backends, Populations
+
+- 引入真实多模态 embedding backend 插件接口（me_ext，不改 me_core）。
+- 引入 Teacher 模块：外部 LLM/规则系统给出策略与配置建议。
+- 将 drives/dialogue 的规则抽象为可编辑策略（policy schema/DSL）。
+- 引入 AgentPopulation：多 Agent 配置在同一组 Scenario 下竞争与筛选。
+- 增加一个“自我改写流水线”：跑任务 -> 内省 -> 请教 Teacher -> 写回策略配置 -> 下一轮评估。
+
 ---
 
 后续改造计划（简要）：

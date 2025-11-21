@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 @dataclass
 class AgentConfig:
     use_dummy_embedding: bool = True
+    embedding_backend_module: Optional[str] = None
     enable_curiosity: bool = True
     enable_introspection: bool = True
     episode_window: int = 1

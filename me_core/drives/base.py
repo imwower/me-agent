@@ -79,6 +79,7 @@ class SimpleDriveSystem(BaseDriveSystem):
     reflect_gap_steps: int = 5
     enable_curiosity: bool = True
     enable_reflection: bool = True
+    policy_config: Any = None  # 占位，用于注入 AgentPolicy
 
     def decide_intent(
         self,
@@ -157,7 +158,13 @@ class SimpleDriveSystem(BaseDriveSystem):
             modalities = getattr(stats, "modalities", {}) or {}
             if isinstance(modalities, dict) and len(modalities.keys()) == 1:
                 count = getattr(stats, "count", 0)
-                if count >= self.curiosity_min_count:
+                threshold = self.curiosity_min_count
+                if self.policy_config and getattr(self.policy_config, "curiosity", None):
+                    try:
+                        threshold = int(self.policy_config.curiosity.min_concept_count)
+                    except Exception:
+                        pass
+                if count >= threshold:
                     interesting = (cid, stats)
                     break
             elif isinstance(modalities, (list, set)) and len(modalities) == 1:

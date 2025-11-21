@@ -45,6 +45,9 @@ class RuleBasedDialoguePolicy(BaseDialoguePolicy):
         - 「我做」：结合自我模型给出的实际回复内容。
     """
 
+    def __init__(self, policy_config: any = None) -> None:
+        self.policy_config = policy_config
+
     def generate_reply(
         self,
         events: List[AgentEvent],
@@ -68,7 +71,13 @@ class RuleBasedDialoguePolicy(BaseDialoguePolicy):
                     last_user_text = text.strip()
                     break
 
-        self_desc = self_model.describe_self(world_model=world)
+        max_concepts = 3
+        if self.policy_config and getattr(self.policy_config, "dialogue", None):
+            try:
+                max_concepts = int(self.policy_config.dialogue.max_recent_concepts)
+            except Exception:
+                pass
+        self_desc = self_model.describe_self(world_model=world, max_concepts=max_concepts)
 
         if intent.kind == "reflect_self":
             return self_model.describe_self(world_model=world)

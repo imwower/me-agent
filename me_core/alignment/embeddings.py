@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import math
 import random
+import importlib
 from typing import List, Protocol
 
 try:  # 避免在 me_core 内部强依赖配置模块
@@ -52,25 +53,45 @@ class DummyEmbeddingBackend:
         return [self._hash_to_vector(ref.path) for ref in audio_refs]
 
 
-def create_embedding_backend(config: AgentConfig | None = None) -> EmbeddingBackend:
+def create_embedding_backend_from_config(config: AgentConfig | None = None) -> EmbeddingBackend:
     """
     根据配置创建 embedding backend。
-    默认使用 DummyEmbeddingBackend，若配置要求非 dummy，则尝试从 me_ext.backends 导入。
+    默认使用 DummyEmbeddingBackend，若配置要求非 dummy，则尝试从扩展模块加载。
     """
 
     use_dummy = True
-    if config is not None and hasattr(config, "use_dummy_embedding"):
-        use_dummy = bool(config.use_dummy_embedding)  # type: ignore[attr-defined]
+    module_name: str | None = None
+    factory_name = "create_backend"
+    if config is not None:
+        use_dummy = bool(getattr(config, "use_dummy_embedding", True))
+        module_name = getattr(config, "embedding_backend_module", None)
+
     if use_dummy:
         return DummyEmbeddingBackend()
 
-    try:
-        from me_ext.backends import RealEmbeddingBackend  # type: ignore
+    if module_name:
+        try:
+            module = importlib.import_module(str(module_name))
+            factory = getattr(module, factory_name, None)
+            if callable(factory):
+                backend = factory(config)  # type: ignore[misc]
+                if backend is not None:
+                    return backend
+        except Exception:
+            pass
 
-        return RealEmbeddingBackend()  # type: ignore[call-arg]
-    except Exception:
-        # 回退到 Dummy，保证核心流程不中断
-        return DummyEmbeddingBackend()
+    # 回退到 Dummy，保证核心流程不中断
+    return DummyEmbeddingBackend()
 
 
-__all__ = ["EmbeddingBackend", "DummyEmbeddingBackend", "create_embedding_backend"]
+# 兼容旧接口命名
+def create_embedding_backend(config: AgentConfig | None = None) -> EmbeddingBackend:
+    return create_embedding_backend_from_config(config)
+
+
+__all__ = [
+    "EmbeddingBackend",
+    "DummyEmbeddingBackend",
+    "create_embedding_backend_from_config",
+    "create_embedding_backend",
+]
