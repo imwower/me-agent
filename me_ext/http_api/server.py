@@ -8,12 +8,20 @@ from typing import Any, Dict
 from me_core.self_model import SimpleSelfModel
 from me_core.world_model import SimpleWorldModel
 from me_core.memory.log_index import LogIndex
+from me_core.research.notebook_builder import NotebookBuilder
+from me_core.research.comparison_builder import ComparisonBuilder
+from me_core.research.paper_builder import PaperDraftBuilder
+from me_core.teachers.manager import TeacherManager
+from me_core.teachers.interface import DummyTeacher
 
 
 class StatusHandler(BaseHTTPRequestHandler):
     world_model: SimpleWorldModel | None = None
     self_model: SimpleSelfModel | None = None
     log_index: LogIndex | None = None
+    notebook_builder: NotebookBuilder | None = None
+    comparison_builder: ComparisonBuilder | None = None
+    paper_builder: PaperDraftBuilder | None = None
 
     def _send(self, code: int, data: Dict[str, Any]) -> None:
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
@@ -39,6 +47,39 @@ class StatusHandler(BaseHTTPRequestHandler):
                 data = self.log_index.query(kinds=["experiment"], max_results=10)
             self._send(200, {"items": data})
             return
+        if self.path.startswith("/notebook/recent"):
+            if self.notebook_builder:
+                nb = self.notebook_builder.build_notebook(max_entries=20)
+                brief = [
+                    {"id": e.id, "kind": e.kind, "desc": e.description, "metrics": e.metrics, "ts": e.timestamp}
+                    for e in nb.entries
+                ]
+                self._send(200, {"entries": brief})
+            else:
+                self._send(500, {"error": "notebook_builder not set"})
+            return
+        if self.path.startswith("/report/comparison"):
+            if self.comparison_builder:
+                points = self.comparison_builder.build_config_points(top_k=10)
+                summary = self.comparison_builder.generate_text_summary(points)
+                self._send(200, {"summary": summary, "points": [p.__dict__ for p in points]})
+            else:
+                self._send(500, {"error": "comparison_builder not set"})
+            return
+        if self.path.startswith("/report/paper_draft"):
+            if self.paper_builder:
+                draft = self.paper_builder.build_draft_outline()
+                self._send(
+                    200,
+                    {
+                        "title": draft.title,
+                        "abstract": draft.abstract,
+                        "sections": [{"title": s.title, "content": s.content} for s in draft.sections],
+                    },
+                )
+            else:
+                self._send(500, {"error": "paper_builder not set"})
+            return
         self._send(404, {"error": "not found"})
 
 
@@ -46,6 +87,10 @@ def serve_http(world: SimpleWorldModel, self_model: SimpleSelfModel, log_root: s
     StatusHandler.world_model = world
     StatusHandler.self_model = self_model
     StatusHandler.log_index = LogIndex(log_root)
+    StatusHandler.notebook_builder = NotebookBuilder(StatusHandler.log_index, world, self_model)
+    comp = ComparisonBuilder(StatusHandler.log_index)
+    StatusHandler.comparison_builder = comp
+    StatusHandler.paper_builder = PaperDraftBuilder(StatusHandler.notebook_builder, comp, TeacherManager([DummyTeacher()]))
     server = HTTPServer(("0.0.0.0", port), StatusHandler)
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()

@@ -7,12 +7,12 @@ import logging
 import time
 
 from me_core.memory import Episode
-from me_core.tasks.experiment_types import ExperimentResult
 from me_core.introspection import IntrospectionLog
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from me_core.brain.graph import BrainGraph
+    from me_core.tasks.experiment_types import ExperimentResult
 
 
 @dataclass
@@ -22,7 +22,7 @@ class TeacherInput:
     introspection: Optional[IntrospectionLog]
     current_config: Dict[str, Any]
     notes: Optional[str] = None
-    experiment_results: Optional[List[ExperimentResult]] = None
+    experiment_results: Optional[List["ExperimentResult"]] = None
     brain_graph: Optional["BrainGraph"] = None
     brain_snapshot: Any | None = None
 
