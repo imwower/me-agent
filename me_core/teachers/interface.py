@@ -36,6 +36,8 @@ class DummyTeacher:
                     reason="触发好奇心以获取更多模态信息。",
                 )
             )
+        if "dev" in notes or "code" in notes:
+            advice_bits.append("代码任务建议：先阅读相关文件，再保证单测通过。")
         if not advice_bits:
             advice_bits.append("保持现有策略，逐步累积经验。")
         return TeacherOutput(

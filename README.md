@@ -111,6 +111,8 @@ me-agent 是一个以“自我驱动的智能体”为核心隐喻的原型系�
 - `tasks/`：Scenario/TaskStep/TaskResult 定义 + 运行器，便于评估不同场景；
 - `introspection/`：生成简单内省日志（总结/错误/改进建议）；
 - `config/`：`AgentConfig` 简易配置，支持选择 Dummy 或外部 backend、开关好奇/内省。
+- `workspace/`：`RepoSpec` / `Repo` / `Workspace`，限制可读写的路径并封装命令执行。
+- `codetasks/`：`CodeTaskPlanner` / `PromptGenerator`，把内省+建议转成 Code-LLM 友好的提示词。
 - `scripts/`
   - `demo_cli_agent.py`：基于 `SimpleAgent` 的命令行 demo（推荐从这里体验最小闭环）；
   - `demo_multimodal_dummy.py`：使用 Dummy 对齐展示“文本/图片 → 概念空间 → Agent 回复”的占位式多模态 demo；
@@ -118,6 +120,7 @@ me-agent 是一个以“自我驱动的智能体”为核心隐喻的原型系�
   - `dump_timeline.py` / `view_timeline.py`：读取 JSONL 事件日志并打印时间线；
   - `view_memory.py`：查看持久化的 Episode / 概念记忆；
   - `run_experiments.py`：批量运行 Scenario，输出评估 + 内省日志；
+  - `run_devloop.py`：串联 Teacher/Code-LLM/工具读写/单测的 DevLoop 自我改写脚本；
   - 其他脚本：演示自我学习循环、驱动力调整和状态查看等。
 - 说明：当前多模态对齐为 R0 Dummy 版本，用于打通结构，后续会接入真实模型。
 - `tests/`
@@ -175,6 +178,14 @@ python scripts/demo_cli_agent.py
 - 外部 Teacher：`me_ext/teachers/real_teacher.py` 支持 HTTP/CLI 调用外部 LLM，返回 PolicyPatch 改写策略。
 - 多模态场景：新增图片对齐/图文一致性 Scenario，评估真实 backend 表现。
 - 演化实验：`scripts/run_evolution_with_teachers.py --experiment-config experiments/r4_real_backend_and_teacher.json` 结合真实 backend + Teacher 跑简单演化并输出报告。
+
+## R5: Code & Repo Orchestrator
+
+- Workspace/Repo 抽象：在 `me_core/workspace` 管理多个仓库的受限读写与命令执行，可参考 `configs/workspace.example.json`。
+- CodeTools & RunTools：`read_file`/`write_file`/`apply_patch` 和 `run_command`/`run_tests`/`run_training` 工具便于自动改写与验证。
+- CodeTask & PromptGenerator：`me_core/codetasks` 将内省与 Teacher 建议转成结构化代码任务，并生成 codex-style 提示。
+- Code-LLM 客户端：`me_ext/codellm/real_codellm.py` 以 mock/http/cli 模式调用外部 Code-LLM。
+- DevLoop：`scripts/run_devloop.py --workspace configs/workspace.example.json --scenarios self_intro` 串联场景→内省→Teacher→Code-LLM→写回→单测的自改流程。
 ### 下载 CIFAR-100 数据集（Python 版）
 
 用于 `scripts/train_cifar100_cnn.py` 的示例数据，可直接用仓库脚本下载并解压到 `data/cifar100`：

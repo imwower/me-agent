@@ -183,6 +183,21 @@
 - 引入 AgentPopulation：多 Agent 配置在同一组 Scenario 下竞争与筛选。
 - 增加一个“自我改写流水线”：跑任务 -> 内省 -> 请教 Teacher -> 写回策略配置 -> 下一轮评估。
 
+## R4: Real Backends & Teachers & Multimodal Scenarios
+
+- 通过 `embedding_backend_module` + `embedding_backend_kwargs` 动态加载真实多模态后端（默认回退 Dummy），`me_ext/backends/real_backend.py` 给出占位实现。  
+- Teacher 管线支持 HTTP/CLI 外部 LLM（`me_ext/teachers/real_teacher.py`），`create_teacher_manager_from_config` 可组合 Dummy/Real。  
+- 新增图片对齐/图文一致性 Scenario 与实验配置 `experiments/r4_real_backend_and_teacher.json`，`run_evolution_with_teachers.py` 可直接运行。  
+- 下一步：替换为真实 CLIP/LLM Teacher，完善跨模态评分标准。
+
+## R5: Code & Repo Orchestrator
+
+- Workspace/Repo 管理：`me_core/workspace` 以 JSON 配置多仓库的受限读写与命令执行。  
+- CodeTools/RunTools：读写/patch 文件，运行命令、单测、训练脚本的标准库工具。  
+- CodeTask & Prompt：`me_core/codetasks` 把内省/Teacher 建议转成结构化代码任务 + codex-style 提示；`me_ext/codellm` 提供 mock/http/cli Code-LLM 客户端。  
+- DevLoop：`scripts/run_devloop.py` 串联 Scenario → 内省 → Teacher → Code-LLM → 写回 → 跑单测的自改流水线。  
+- TODO：引入代码任务优先级到种群演化，支持跨仓库协同，把 DevLoop 结果反馈到外部训练/强化学习流程。
+
 ---
 
 后续改造计划（简要）：

@@ -458,8 +458,17 @@ class SimpleAgent(BaseAgent):
                 tags=set(modalities),
             )
 
-    def introspect(self, scenario_id: Optional[str], start_step: int, end_step: Optional[int] = None) -> Optional[IntrospectionLog]:
+    def introspect(
+        self,
+        scenario_id: Optional[str],
+        start_step: int,
+        end_step: Optional[int] = None,
+        test_failures: Optional[List[str]] = None,
+        notes: Optional[str] = None,
+    ) -> Optional[IntrospectionLog]:
         if self.introspection_generator is None:
             return None
         final_step = end_step if end_step is not None else getattr(self.world_model, "current_step", start_step)
-        return self.introspection_generator.generate(scenario_id, start_step, final_step)
+        return self.introspection_generator.generate(
+            scenario_id=scenario_id, start_step=start_step, end_step=final_step, test_failures=test_failures, notes=notes
+        )

@@ -1,0 +1,10 @@
+{
+  "repos": [
+    {
+      "id": "me-agent",
+      "name": "me-agent",
+      "path": ".",
+      "allowed_paths": ["."]
+    }
+  ]
+}

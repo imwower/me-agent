@@ -19,6 +19,8 @@ from .base import (  # noqa: F401
 )
 from .registry import ToolInfo, ToolRegistry  # noqa: F401
 from .executor_stub import ToolExecutorStub  # noqa: F401
+from .codetools import ReadFileTool, WriteFileTool, ApplyPatchTool  # noqa: F401
+from .runtools import RunCommandTool, RunTestsTool, RunTrainingScriptTool  # noqa: F401
 
 __all__ = [
     "BaseTool",
@@ -29,6 +31,12 @@ __all__ = [
     "FileReadTool",
     "SelfDescribeTool",
     "MultimodalQATool",
+    "ReadFileTool",
+    "WriteFileTool",
+    "ApplyPatchTool",
+    "RunCommandTool",
+    "RunTestsTool",
+    "RunTrainingScriptTool",
     "ToolInfo",
     "ToolRegistry",
     "ToolExecutorStub",

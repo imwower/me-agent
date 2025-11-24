@@ -45,15 +45,27 @@ class IntrospectionGenerator:
         scenario_id: Optional[str],
         start_step: int,
         end_step: int,
+        test_failures: Optional[List[str]] = None,
+        notes: Optional[str] = None,
     ) -> IntrospectionLog:
         events = getattr(self.world, "events_between", lambda a, b: [])(start_step, end_step)
         summary_parts: List[str] = []
         if events:
             summary_parts.append(f"本段内共有 {len(events)} 条事件。")
         summary_parts.append(self.self_model.describe_self(world_model=self.world))
+        if notes:
+            summary_parts.append(notes)
 
         mistakes = self._collect_mistakes()
+        if test_failures:
+            mistakes.append(f"以下测试失败：{', '.join(test_failures)}")
+
         improvements = self._collect_improvements()
+        is_code_scene = (scenario_id and any(key in scenario_id for key in ("dev", "code"))) or (
+            notes and any(key in notes for key in ("dev", "code"))
+        )
+        if is_code_scene:
+            improvements.append("针对代码场景，建议补充单元测试并复查最近的修改。")
 
         return IntrospectionLog.new(
             scenario_id=scenario_id,
