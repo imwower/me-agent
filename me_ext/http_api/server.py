@@ -14,6 +14,9 @@ from me_core.research.comparison_builder import ComparisonBuilder
 from me_core.research.paper_builder import PaperDraftBuilder
 from me_core.teachers.manager import TeacherManager
 from me_core.teachers.interface import DummyTeacher
+import argparse
+import time
+import sys
 
 
 class StatusHandler(BaseHTTPRequestHandler):
@@ -157,4 +160,24 @@ def serve_http(world: SimpleWorldModel, self_model: SimpleSelfModel, log_root: s
     return thread
 
 
-__all__ = ["serve_http"]
+def main() -> None:
+    parser = argparse.ArgumentParser(description="启动 HTTP Dashboard")
+    parser.add_argument("--workspace", type=str, default=None, help="当前未使用，仅保留接口兼容性")
+    parser.add_argument("--log-root", type=str, default="logs")
+    parser.add_argument("--port", type=int, default=8000)
+    args = parser.parse_args()
+
+    serve_http(SimpleWorldModel(), SimpleSelfModel(), log_root=args.log_root, port=args.port)
+    print(f"HTTP server on {args.port}. 按 Ctrl+C 停止。")
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()
+
+
+__all__ = ["serve_http", "main"]
