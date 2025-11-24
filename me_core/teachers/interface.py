@@ -57,6 +57,8 @@ class DummyTeacher:
                     )
                     advice_bits.append("实验 loss 偏高，尝试降低学习率。")
                     break
+        if getattr(ti, "brain_graph", None):
+            advice_bits.append("注意脑结构指标，必要时稀疏化连接或调整区域规模。")
         if not advice_bits:
             advice_bits.append("保持现有策略，逐步累积经验。")
         return TeacherOutput(

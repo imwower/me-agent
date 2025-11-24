@@ -44,6 +44,7 @@ class DevLoopExperimentModeTestCase(unittest.TestCase):
                 codellm_cfg={"mode": "mock", "mock_response": json.dumps({"path": "README.md", "content": "demo"})},
                 output=output_path,
                 experiment_scenarios=[exp],
+                brain_mode=False,
             )
             self.assertTrue(output_path.exists())
             self.assertIn("experiments", summary)

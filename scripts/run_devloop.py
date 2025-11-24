@@ -39,6 +39,9 @@ from me_core.tools import (
     EchoTool,
     FileReadTool,
     HttpGetTool,
+    DumpBrainGraphTool,
+    EvalBrainEnergyTool,
+    EvalBrainMemoryTool,
     ReadFileTool,
     RunTestsTool,
     SelfDescribeTool,
@@ -166,6 +169,7 @@ def run_devloop(
     codellm_cfg: Dict[str, Any],
     output: Path,
     experiment_scenarios: Optional[List[ExperimentScenario]] = None,
+    brain_mode: bool = False,
 ) -> Dict[str, Any]:
     registry = ScenarioRegistry()
     exp_registry = ExperimentScenarioRegistry()
@@ -178,6 +182,23 @@ def run_devloop(
     planner = CodeTaskPlanner()
     prompt_generator = PromptGenerator()
     test_tool = RunTestsTool(workspace)
+    brain_summary: str | None = None
+
+    # brain mode: 尝试获取脑结构/能耗/记忆信息
+    if brain_mode:
+        brain_repos = workspace.get_brain_repos()
+        target_repo = brain_repos[0] if brain_repos else None
+        if target_repo:
+            graph_tool = DumpBrainGraphTool(workspace)
+            energy_tool = EvalBrainEnergyTool(workspace)
+            memory_tool = EvalBrainMemoryTool(workspace)
+            g_res = graph_tool.run({"repo_id": target_repo.id})
+            brain_summary = g_res.get("summary")
+            energy_res = energy_tool.run({"repo_id": target_repo.id})
+            memory_res = memory_tool.run({"repo_id": target_repo.id})
+            # 记录到 output
+            with output.open("a", encoding="utf-8") as f:
+                f.write(json.dumps({"brain": g_res, "energy": energy_res, "memory": memory_res}, ensure_ascii=False) + "\n")
 
     results: List[Dict[str, Any]] = []
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -214,6 +235,7 @@ def run_devloop(
                 "policy": policy_to_dict(agent_spec.policy),
             },
             notes="devloop",
+            brain_graph=None,
         )
         teacher_outputs = teacher_manager.gather_advice(teacher_input)
         # 应用策略补丁（仅内存）
@@ -230,7 +252,7 @@ def run_devloop(
         for task in tasks:
             paths_to_read = list(set(task.files_to_read + task.files_to_edit))
             contents = _collect_file_contents(workspace, repo_id, paths_to_read)
-            prompt = prompt_generator.generate(task, contents)
+            prompt = prompt_generator.generate(task, contents, brain_summary=brain_summary)
             llm_output = codellm.complete(prompt)
             changed_files = _apply_llm_output(workspace, repo_id, llm_output)
             test_res = test_tool.run({"repo_id": repo_id, "command": task.test_command})
@@ -319,6 +341,7 @@ def main() -> None:
     parser.add_argument("--codellm-config", type=str, default=None, help="Code-LLM 配置 JSON 路径")
     parser.add_argument("--scenarios", type=str, default="self_intro", help="要运行的 scenario id，逗号分隔")
     parser.add_argument("--experiment-scenarios", type=str, default="", help="实验场景 id（逗号），为空则不跑实验")
+    parser.add_argument("--brain-mode", action="store_true", help="启用脑结构自改模式")
     parser.add_argument("--output", type=str, default="outputs/devloop_report.jsonl", help="输出 JSONL 路径")
     args = parser.parse_args()
 
@@ -366,6 +389,7 @@ def main() -> None:
         codellm_cfg=codellm_cfg,
         output=output_path,
         experiment_scenarios=experiment_scenarios,
+        brain_mode=args.brain_mode,
     )
     print(f"DevLoop 完成，结果写入 {summary['output']}")  # noqa: T201
 

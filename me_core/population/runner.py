@@ -22,6 +22,7 @@ from me_core.tasks import (
 )
 from me_core.tools import EchoTool, FileReadTool, HttpGetTool, SelfDescribeTool, TimeTool
 from me_core.world_model import SimpleWorldModel
+from me_core.tools import DumpBrainGraphTool, EvalBrainEnergyTool, EvalBrainMemoryTool
 from me_core.teachers.manager import TeacherManager
 from me_core.teachers.types import TeacherInput
 from me_core.workspace import Workspace
@@ -77,6 +78,7 @@ def evaluate_population(
     experiment_scenarios: Optional[List[ExperimentScenario]] = None,
     workspace: Optional[Workspace] = None,
     experiment_weight: float = 0.5,
+    brain_weight: float = 0.2,
 ) -> Dict[str, AgentFitness]:
     registry = ScenarioRegistry()
     results: Dict[str, AgentFitness] = {}
@@ -90,6 +92,7 @@ def evaluate_population(
         scenario_scores: Dict[str, float] = {}
         experiment_scores: Dict[str, float] = {}
         introspection_notes: List[str] = []
+        brain_metrics: Dict[str, float] = {}
 
         for sid in scenario_ids:
             sc = registry.get(sid)
@@ -122,17 +125,41 @@ def evaluate_population(
                 experiment_scores[esc.id] = score
 
         base_score = sum(scenario_scores.values()) / len(scenario_scores) if scenario_scores else 0.0
-        if experiment_scores:
-            exp_score = sum(experiment_scores.values()) / len(experiment_scores)
-            overall = experiment_weight * base_score + (1 - experiment_weight) * exp_score
-        else:
-            overall = base_score
+        exp_score = sum(experiment_scores.values()) / len(experiment_scores) if experiment_scores else 0.0
+        brain_score = 0.0
+        if workspace:
+            try:
+                graph_tool = DumpBrainGraphTool(workspace)
+                energy_tool = EvalBrainEnergyTool(workspace)
+                memory_tool = EvalBrainMemoryTool(workspace)
+                brain_repos = workspace.get_brain_repos()
+                target_repo = brain_repos[0] if brain_repos else None
+                if target_repo:
+                    g_res = graph_tool.run({"repo_id": target_repo.id})
+                    energy_res = energy_tool.run({"repo_id": target_repo.id})
+                    memory_res = memory_tool.run({"repo_id": target_repo.id})
+                    if isinstance(energy_res.get("energy"), (int, float)):
+                        brain_metrics["energy"] = float(energy_res.get("energy"))
+                    if isinstance(memory_res.get("capacity"), (int, float)):
+                        brain_metrics["memory_capacity"] = float(memory_res.get("capacity"))
+                    brain_score = 1.0 / (1.0 + brain_metrics.get("energy", 0.0)) + brain_metrics.get(
+                        "memory_capacity", 0.0
+                    )
+            except Exception:
+                brain_score = 0.0
+
+        overall = (
+            (1 - experiment_weight - brain_weight) * base_score
+            + experiment_weight * exp_score
+            + brain_weight * brain_score
+        )
         results[spec.id] = AgentFitness(
             spec_id=spec.id,
             scenario_scores=scenario_scores,
             experiment_scores=experiment_scores,
             overall_score=overall,
             introspection_summaries=introspection_notes,
+            brain_metrics=brain_metrics,
         )
         if out_file:
             out_file.write(

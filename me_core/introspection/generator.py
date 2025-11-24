@@ -51,6 +51,7 @@ class IntrospectionGenerator:
         test_failures: Optional[List[str]] = None,
         notes: Optional[str] = None,
         experiment_results: Optional["List[ExperimentResult]"] = None,
+        brain_graph: Optional["BrainGraph"] = None,
     ) -> IntrospectionLog:
         events = getattr(self.world, "events_between", lambda a, b: [])(start_step, end_step)
         summary_parts: List[str] = []
@@ -76,6 +77,14 @@ class IntrospectionGenerator:
                     summary_parts.append(f"实验 {res.step.kind} 指标：{res.metrics}")
                 if res.returncode != 0:
                     mistakes.append(f"实验步骤 {res.step.kind} 退出码 {res.returncode}")
+        if brain_graph:
+            summary_parts.append(brain_graph.summary())
+            # 简单规则：能耗或记忆指标提醒
+            for m in brain_graph.metrics:
+                if m.name.lower() == "energy" and m.value > 1.0:
+                    mistakes.append("能耗偏高，考虑减少连接或稀疏化。")
+                if "memory" in m.name.lower() and m.value < 0.5:
+                    improvements.append("记忆容量较低，尝试增加相关区域或调整学习率。")
 
         return IntrospectionLog.new(
             scenario_id=scenario_id,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Any
 
 from me_core.alignment.concepts import ConceptId
 
@@ -18,6 +18,7 @@ class ConceptMemory:
     examples: List[str] = field(default_factory=list)
     tags: Set[str] = field(default_factory=set)
     updated_at: float = field(default_factory=time.time)
+    graph_ref: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> dict:
         return {
@@ -27,6 +28,7 @@ class ConceptMemory:
             "examples": list(self.examples),
             "tags": sorted(self.tags),
             "updated_at": self.updated_at,
+            "graph_ref": self.graph_ref,
         }
 
     @classmethod
@@ -38,6 +40,7 @@ class ConceptMemory:
             examples=list(data.get("examples") or []),
             tags=set(data.get("tags") or []),
             updated_at=float(data.get("updated_at") or time.time()),
+            graph_ref=data.get("graph_ref"),
         )
 
 
@@ -60,6 +63,7 @@ class SemanticMemory:
         description: str,
         example: Optional[str] = None,
         tags: Optional[Set[str]] = None,
+        graph_ref: Optional[Dict[str, Any]] = None,
     ) -> None:
         key = str(concept_id)
         cm = self._concepts.get(key)
@@ -72,6 +76,8 @@ class SemanticMemory:
             cm.examples.append(example)
         if tags:
             cm.tags.update(tags)
+        if graph_ref:
+            cm.graph_ref = graph_ref
         cm.updated_at = time.time()
         self._concepts[key] = cm
         try:
@@ -94,3 +100,40 @@ class SemanticMemory:
 
     def all_memories(self) -> List[ConceptMemory]:
         return list(self._concepts.values())
+
+    # 脑图谱映射：将 BrainGraph 转成多个 ConceptMemory
+    def upsert_brain_graph_memory(self, brain_graph: "BrainGraph") -> None:
+        try:
+            from me_core.alignment.concepts import ConceptNode
+        except Exception:
+            ConceptNode = None  # type: ignore
+
+        brain_concept_id = ConceptId(f"brain:{brain_graph.repo_id}")
+        desc = brain_graph.summary()
+        tags = {"brain", brain_graph.repo_id}
+        metrics_desc = "; ".join(f"{m.name}={m.value}{m.unit}" for m in brain_graph.metrics)
+        if metrics_desc:
+            desc = desc + f" 关键指标：{metrics_desc}"
+        self.upsert_concept_memory(
+            concept_id=brain_concept_id,
+            name=f"{brain_graph.repo_id} 脑图谱",
+            description=desc,
+            tags=tags,
+            graph_ref={"repo_id": brain_graph.repo_id},
+        )
+        for region in brain_graph.regions.values():
+            rid = ConceptId(f"region:{brain_graph.repo_id}:{region.id}")
+            rdesc = f"类型={region.kind}，规模={region.size}"
+            self.upsert_concept_memory(
+                concept_id=rid,
+                name=f"脑区:{region.name}",
+                description=rdesc,
+                tags={"brain_region", brain_graph.repo_id},
+                graph_ref={"repo_id": brain_graph.repo_id, "region_id": region.id},
+            )
+
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from me_core.brain.graph import BrainGraph

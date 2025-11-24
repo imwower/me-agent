@@ -194,6 +194,15 @@ python scripts/demo_cli_agent.py
 - 教师与补丁：TeacherInput/Output 增加实验结果与 ConfigPatch，Dummy/Real Teacher 可对超参/配置提出修改建议；`apply_config_patches` 支持 JSON 配置自动打补丁。
 - DevLoop 实验模式：`scripts/run_devloop.py --experiment-scenarios exp1` 结合 RunTools 跑实验、解析指标、应用 Teacher 建议并写回配置/策略。
 - Population Fitness：种群评估可将实验分数纳入 Fitness（可配置权重），用于对比不同 Agent/策略。
+
+## R7: Self-SNN Brain Integration & Knowledge Graph
+
+- Workspace 标记 brain/snn 仓库（meta 含 structure/energy/memory 脚本）；提供获取 brain 仓库的辅助方法。
+- BrainGraph：区域/连接/指标抽象 + JSON 适配器，SemanticMemory 可存脑图谱与脑区概念。
+- 脑工具：`DumpBrainGraphTool` / `EvalBrainEnergyTool` / `EvalBrainMemoryTool` 调用仓库脚本获取结构/能耗/记忆指标。
+- 内省 & Teacher：支持脑结构/能耗/记忆信息，生成结构/配置建议（含 ConfigPatch）。
+- DevLoop brain 模式：`scripts/run_devloop.py --brain-mode` 先拉取脑结构/能耗/记忆，再跑实验、应用 Teacher/Code-LLM 改配置/代码。
+- Population：Fitness 纳入 brain 指标（能耗、记忆容量等）与实验分权重。
 ### 下载 CIFAR-100 数据集（Python 版）
 
 用于 `scripts/train_cifar100_cnn.py` 的示例数据，可直接用仓库脚本下载并解压到 `data/cifar100`：

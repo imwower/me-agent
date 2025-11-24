@@ -29,6 +29,9 @@ class Workspace:
     def get_experiment_targets(self) -> List[RepoSpec]:
         return [spec for spec in self.specs.values() if "experiment_target" in spec.tags]
 
+    def get_brain_repos(self) -> List[RepoSpec]:
+        return [spec for spec in self.specs.values() if ("brain" in spec.tags or "snn" in spec.tags)]
+
     @classmethod
     def from_json(cls, path: str | Path) -> "Workspace":
         p = Path(path)

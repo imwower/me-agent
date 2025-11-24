@@ -73,6 +73,7 @@ class RealTeacher(Teacher):
                 }
                 for r in (ti.experiment_results or [])
             ],
+            "brain_graph": ti.brain_graph.summary() if ti.brain_graph else None,
         }
         prompt = (
             "你是一个策略老师，请根据以下 JSON 给出改进建议，并返回 JSON，其中包含 advice 文本和 patches。"

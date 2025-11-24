@@ -208,6 +208,16 @@
 - Population Fitness：种群评估加入实验分权重；整体分 = 场景分与实验分的加权平均。  
 - 下一步：更强的日志/指标解析、支持多阶段实验 pipeline、针对 self-snn/多模态后端的能耗/性能指标深度融合。
 
+## R7: Self-SNN Brain Integration
+
+- Workspace 标记 brain/snn 仓库，附带结构/能耗/记忆脚本元信息。  
+- BrainGraph：区域/连接/指标抽象与 JSON 适配器，支持写入 SemanticMemory。  
+- 脑工具：结构/能耗/记忆分析工具调用仓库脚本并返回摘要/指标。  
+- Introspection/Teacher：可接收 BrainGraph、能耗/记忆指标，给出结构/超参建议与 ConfigPatch。  
+- DevLoop：新增 brain 模式入口（结构/能耗/记忆 → Teacher/Code-LLM → 配置/代码修改 → 训练评估）。  
+- Population：Fitness 纳入 brain 指标（能耗/记忆等）。  
+- TODO：更精细的脑图谱标签、能耗模型、跨 brain 版本对比、结构搜索。
+
 ---
 
 后续改造计划（简要）：

@@ -36,6 +36,9 @@ class CodeTaskPlanner:
                 path = step.get("image_path")
                 if path:
                     files.append(path)
+        constraints = ["仅使用标准库 unless 扩展", "保持现有接口兼容"]
+        if introspection and introspection.summary and "脑" in introspection.summary:
+            constraints.append("针对脑结构改动需保持训练脚本可运行，中文注释说明改动原因")
         tasks.append(
             CodeTask(
                 id=str(uuid.uuid4()),
@@ -44,7 +47,7 @@ class CodeTaskPlanner:
                 description="\n".join(description_bits) or "改进代码质量和测试稳定性。",
                 files_to_read=list(set(files)),
                 files_to_edit=[],
-                constraints=["仅使用标准库 unless 扩展", "保持现有接口兼容"],
+                constraints=constraints,
                 acceptance_criteria=["单测通过", "满足 Teacher/内省建议"],
             )
         )

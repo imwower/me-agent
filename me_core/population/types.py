@@ -14,6 +14,7 @@ class AgentFitness:
     overall_score: float = 0.0
     notes: str = ""
     introspection_summaries: List[str] = field(default_factory=list)
+    brain_metrics: Dict[str, float] = field(default_factory=dict)
 
 
 __all__ = ["AgentFitness", "AgentSpec"]

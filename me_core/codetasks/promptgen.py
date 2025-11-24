@@ -8,11 +8,13 @@ from .types import CodeTask
 class PromptGenerator:
     """将 CodeTask + 文件内容拼装成适合 Code-LLM 的提示词。"""
 
-    def generate(self, task: CodeTask, file_contents: Dict[str, str]) -> str:
+    def generate(self, task: CodeTask, file_contents: Dict[str, str], brain_summary: str | None = None) -> str:
         lines: List[str] = []
         lines.append(f"你现在是本项目的协同开发 AI。任务编号：{task.id}，仓库：{task.repo_id}")
         lines.append("\n目标：")
         lines.append(task.description)
+        if brain_summary:
+            lines.append(f"\n脑结构概况：{brain_summary}")
         if task.constraints:
             lines.append("\n约束：")
             for c in task.constraints:
