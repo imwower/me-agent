@@ -236,6 +236,13 @@ python scripts/demo_cli_agent.py
 - 联合进化：CoEvoPlanner/CoEvoState 组织 AgentPopulation 与 self-snn 训练计划，`scripts/run_coevolution.py` 运行多代，`scripts/view_coevo_dashboard.py` 查看分数曲线。
 - 可视化与检索：LogIndex/查询脚本、协作视图、Dashboard 结合，便于长期跟踪自演化进程。
 
+## R14: 自动作图与 Web Research Dashboard
+
+- PlotSpec/PlotBuilder：在 me_core 描述 line/bar/brain_graph 规格，不依赖绘图库。
+- PlotRenderer：`me_ext/plots/matplotlib_backend.py` 用 matplotlib 将 PlotSpec 渲染为 PNG（生成到 `reports/plots`），`scripts/render_plots.py` 一键出图。
+- Notebook/Comparison/PaperDraft：生成时会带上建议图表 ID，脚本可在 Markdown 中嵌入已有图像。
+- HTTP Dashboard：`me_ext/http_api/static/` 简易前端，HTTP API 增加 `/notebook/recent` `/report/comparison` `/report/paper_draft` `/plots/*`，可查看状态、实验、Notebook 摘要与图表。
+
 ## 快速启动（接 self-snn 示例）
 
 1) 配置 workspace：`configs/workspace.example.json` 已填好 self-snn 路径 `/Users/george/code/github/self-snn`，允许访问 configs/scripts/self_snn/tests/runs，默认训练/评估/brain 脚本都指向 self-snn。

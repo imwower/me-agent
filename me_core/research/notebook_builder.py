@@ -54,4 +54,8 @@ class NotebookBuilder:
             meta["self"] = self.self_model.describe_self()  # type: ignore[arg-type]
         if self.world is not None:
             meta["world_summary"] = self.world.summarize()
+        meta["suggested_plots"] = [
+            {"id": "brain_graph", "title": "Brain Graph"},
+            {"id": "experiment_curve", "title": "Experiment Curve"},
+        ]
         return ExperimentNotebook(id=str(uuid.uuid4()), title=title, entries=entries, meta=meta)

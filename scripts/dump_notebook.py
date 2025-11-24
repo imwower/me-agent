@@ -42,6 +42,7 @@ def main() -> None:
     parser.add_argument("--since", type=float, default=None)
     parser.add_argument("--until", type=float, default=None)
     parser.add_argument("--output", type=str, default="reports/notebooks")
+    parser.add_argument("--with-plots", action="store_true", help="在 Markdown 中附带已渲染图表")
     args = parser.parse_args()
 
     idx = LogIndex("logs")
@@ -53,6 +54,16 @@ def main() -> None:
     out_dir = Path(args.output)
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"notebook_{int(time.time())}.md"
+    if args.with_plots:
+        plot_lines = []
+        plots_dir = Path("reports/plots")
+        for p in nb.meta.get("suggested_plots", []):
+            pid = p.get("id")
+            img = plots_dir / f"{pid}.png"
+            if img.exists():
+                plot_lines.append(f"![图 {pid}]({img.as_posix()})")
+        if plot_lines:
+            md = md + "\n\n" + "\n".join(plot_lines)
     out_path.write_text(md, encoding="utf-8")
     print(f"Notebook 已保存到 {out_path}")  # noqa: T201
 

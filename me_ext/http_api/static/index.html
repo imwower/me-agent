@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>me-agent Research Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <h1>me-agent Research Dashboard</h1>
+
+  <section>
+    <h2>当前状态</h2>
+    <pre id="status-text">加载中...</pre>
+  </section>
+
+  <section>
+    <h2>最近实验</h2>
+    <pre id="experiments-text">加载中...</pre>
+  </section>
+
+  <section>
+    <h2>Notebook 摘要</h2>
+    <pre id="notebook-text">加载中...</pre>
+  </section>
+
+  <section>
+    <h2>对比摘要</h2>
+    <pre id="comparison-text">加载中...</pre>
+  </section>
+
+  <section>
+    <h2>图表</h2>
+    <div class="figures">
+      <img id="brain-graph-img" alt="Brain Graph" />
+      <img id="experiment-curve-img" alt="Experiment Curve" />
+    </div>
+  </section>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

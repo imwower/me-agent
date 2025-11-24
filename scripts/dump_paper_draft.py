@@ -30,6 +30,13 @@ def _markdown_from_draft(draft) -> str:
             lines.append(f"### {sub.title}")
             lines.append(sub.content)
         lines.append("")
+    figs = draft.meta.get("figures") if isinstance(draft.meta, dict) else None
+    if figs:
+        lines.append("## Figures")
+        for fig in figs:
+            lines.append(f"![{fig.get('id')}]({fig.get('path')})")
+            lines.append(f"图 {fig.get('id')}：{fig.get('title')}")
+            lines.append("")
     return "\n".join(lines)
 
 
@@ -45,6 +52,11 @@ def main() -> None:
     comp_builder = ComparisonBuilder(idx)
     draft_builder = PaperDraftBuilder(nb_builder, comp_builder, TeacherManager([DummyTeacher()]))
     draft = draft_builder.build_draft_outline()
+    plots_dir = Path("reports/plots")
+    draft.meta["figures"] = [
+        {"id": "brain_graph", "title": "Brain Graph", "path": (plots_dir / "brain_graph.png").as_posix()},
+        {"id": "experiment_curve", "title": "Experiment Curve", "path": (plots_dir / "experiment_curve.png").as_posix()},
+    ]
     md = _markdown_from_draft(draft)
     out_dir = Path(args.output)
     out_dir.mkdir(parents=True, exist_ok=True)

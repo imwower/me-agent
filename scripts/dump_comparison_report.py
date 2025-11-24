@@ -13,6 +13,8 @@ if str(ROOT) not in sys.path:
 
 from me_core.memory.log_index import LogIndex
 from me_core.research.comparison_builder import ComparisonBuilder
+from me_core.research.plot_builder import PlotBuilder
+from me_ext.plots.matplotlib_backend import PlotRenderer
 
 
 def main() -> None:
@@ -25,6 +27,9 @@ def main() -> None:
     builder = ComparisonBuilder(idx)
     points = builder.build_config_points(scenario_filter=args.scenario, top_k=20)
     summary = builder.generate_text_summary(points)
+    renderer = PlotRenderer()
+    plot = PlotBuilder.build_experiment_curve_plot(idx, scenario_id=args.scenario)
+    plot_path = renderer.render(plot)
 
     lines = ["# 对比报告", ""]
     lines.append(f"- 采样配置点数: {len(points)}")
@@ -33,6 +38,9 @@ def main() -> None:
     lines.append("## 配置点列表")
     for p in points:
         lines.append(f"- {p.id}: params={p.params}, metrics={p.metrics}")
+    if plot_path:
+        lines.append("")
+        lines.append(f"![实验曲线]({plot_path})")
 
     out_dir = Path(args.output)
     out_dir.mkdir(parents=True, exist_ok=True)

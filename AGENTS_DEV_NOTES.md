@@ -253,6 +253,14 @@
 - CoEvoPlanner：组织 AgentPopulation 与 self-snn TrainSchedule，输出 CoEvoState，`run_coevolution.py` 执行多代，dashboard 查看结果。  
 - TODO：更智能的任务生成（LLM/Teacher 参与）、更细粒度的自适应 curriculum 与真实数据集对齐。  
 
+## R14: 自动作图与 Web Dashboard
+
+- PlotSpec（line/bar/brain_graph）定义在 me_core，仅描述意图；PlotBuilder 将 BrainGraph/实验日志/coevo fitness 转成 PlotSpec。  
+- me_ext/plots：matplotlib 后端渲染 PlotSpec → PNG，`scripts/render_plots.py` 批量生成。  
+- Notebook/Comparison/PaperDraft：在 meta/输出中携带推荐图表 ID，可在 Markdown 中引用已有图片。  
+- HTTP API & 前端：/notebook/recent /report/comparison /report/paper_draft /plots/*，静态页面展示状态、实验摘要、图表。  
+- 后续：考虑自动插入 LaTeX/论文编译流水线、更多指标曲线与交互。  
+
 ---
 
 后续改造计划（简要）：
