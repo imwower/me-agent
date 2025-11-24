@@ -261,6 +261,59 @@ python scripts/demo_cli_agent.py
    ```  
    workspace 中的 meta 会调用 self-snn 的训练/评估/脑推理脚本。
 
+### 训练两条常用路径
+
+- **直接在 self-snn 仓库训练**  
+  ```bash
+  cd /Users/george/code/github/self-snn
+  python scripts/train.py --config configs/agency.yaml --logdir runs/agency --duration 300
+  # 评估 / 脑态
+  python scripts/eval_memory.py --json
+  python scripts/eval_router_energy.py --json
+  python scripts/run_brain_infer.py --config configs/agency.yaml --task-id demo
+  ```
+
+- **通过 me-agent 调用 self-snn（brain-mode / 联合任务）**  
+  ```bash
+  cd /Users/george/code/github/me-agent
+  bash scripts/start_me_agent.sh
+  # 生成任务后跑联合进化/训练计划
+  python scripts/generate_tasks.py --max 5
+  python scripts/run_coevolution.py --gens 2 --tasks-root data/generated_tasks
+  ```
+  渲染图表并查看研究层产物：  
+  ```bash
+  python scripts/render_plots.py --workspace configs/workspace.example.json
+  python scripts/dump_notebook.py --with-plots
+  ```
+  启动 HTTP Dashboard：  
+  ```bash
+  python - <<'PYDASH'
+  from me_core.world_model import SimpleWorldModel
+  from me_core.self_model import SimpleSelfModel
+  from me_ext.http_api import serve_http
+  serve_http(SimpleWorldModel(), SimpleSelfModel(), port=8000)
+  input("HTTP server on 8000, Enter to stop")
+  PYDASH
+  ```  
+  浏览器访问 `http://localhost:8000/static/index.html` 可查看状态/实验摘要/Notebook/对比/图表。
+
+1) 配置 workspace：`configs/workspace.example.json` 已填好 self-snn 路径 `/Users/george/code/github/self-snn`，允许访问 configs/scripts/self_snn/tests/runs，默认训练/评估/brain 脚本都指向 self-snn。
+2) 直接运行一轮 brain-mode devloop（含自我/脑工具）：  
+   ```bash
+   bash scripts/start_me_agent.sh
+   ```  
+   如需自定义路径或场景，调整 workspace 路径或修改脚本参数。  
+3) 单独调用自定义 orchestrator：  
+   ```bash
+   python scripts/run_orchestrator.py \
+     --workspace configs/workspace.example.json \
+     --mode devloop \
+     --use-brain \
+     --scenarios self_intro
+   ```  
+   workspace 中的 meta 会调用 self-snn 的训练/评估/脑推理脚本。
+
 ### 下载 CIFAR-100 数据集（Python 版）
 
 用于 `scripts/train_cifar100_cnn.py` 的示例数据，可直接用仓库脚本下载并解压到 `data/cifar100`：
