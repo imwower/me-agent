@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 
 from me_core.learning import SimpleLearner
 from me_core.self_model import SimpleSelfModel
 from me_core.world_model import SimpleWorldModel
+
+if TYPE_CHECKING:  # 避免循环导入
+    from me_core.tasks.experiment_types import ExperimentResult
 
 from .types import IntrospectionLog
 
@@ -47,6 +50,7 @@ class IntrospectionGenerator:
         end_step: int,
         test_failures: Optional[List[str]] = None,
         notes: Optional[str] = None,
+        experiment_results: Optional["List[ExperimentResult]"] = None,
     ) -> IntrospectionLog:
         events = getattr(self.world, "events_between", lambda a, b: [])(start_step, end_step)
         summary_parts: List[str] = []
@@ -66,6 +70,12 @@ class IntrospectionGenerator:
         )
         if is_code_scene:
             improvements.append("针对代码场景，建议补充单元测试并复查最近的修改。")
+        if experiment_results:
+            for res in experiment_results:
+                if res.metrics:
+                    summary_parts.append(f"实验 {res.step.kind} 指标：{res.metrics}")
+                if res.returncode != 0:
+                    mistakes.append(f"实验步骤 {res.step.kind} 退出码 {res.returncode}")
 
         return IntrospectionLog.new(
             scenario_id=scenario_id,

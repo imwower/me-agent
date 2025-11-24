@@ -10,7 +10,8 @@ from me_core.policy.agents import AgentSpec
 class AgentFitness:
     spec_id: str
     scenario_scores: Dict[str, float]
-    overall_score: float
+    experiment_scores: Dict[str, float] = field(default_factory=dict)
+    overall_score: float = 0.0
     notes: str = ""
     introspection_summaries: List[str] = field(default_factory=list)
 

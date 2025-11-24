@@ -186,6 +186,14 @@ python scripts/demo_cli_agent.py
 - CodeTask & PromptGenerator：`me_core/codetasks` 将内省与 Teacher 建议转成结构化代码任务，并生成 codex-style 提示。
 - Code-LLM 客户端：`me_ext/codellm/real_codellm.py` 以 mock/http/cli 模式调用外部 Code-LLM。
 - DevLoop：`scripts/run_devloop.py --workspace configs/workspace.example.json --scenarios self_intro` 串联场景→内省→Teacher→Code-LLM→写回→单测的自改流程。
+
+## R6: Experiment Orchestrator (SNN / Backend Projects)
+
+- Workspace 中的 RepoSpec 支持 tags/meta，可标记 `experiment_target` 仓库（如 self-snn、多模态 backend），并附带默认训练/评估命令。
+- ExperimentScenario：在 `me_core/tasks/experiment_types.py` 定义 train/eval/custom 步骤，支持 regex/json/plain 指标解析，`experiment_runner` 可运行并用公式求分。
+- 教师与补丁：TeacherInput/Output 增加实验结果与 ConfigPatch，Dummy/Real Teacher 可对超参/配置提出修改建议；`apply_config_patches` 支持 JSON 配置自动打补丁。
+- DevLoop 实验模式：`scripts/run_devloop.py --experiment-scenarios exp1` 结合 RunTools 跑实验、解析指标、应用 Teacher 建议并写回配置/策略。
+- Population Fitness：种群评估可将实验分数纳入 Fitness（可配置权重），用于对比不同 Agent/策略。
 ### 下载 CIFAR-100 数据集（Python 版）
 
 用于 `scripts/train_cifar100_cnn.py` 的示例数据，可直接用仓库脚本下载并解压到 `data/cifar100`：

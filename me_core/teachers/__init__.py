@@ -1,4 +1,4 @@
-from .types import TeacherInput, TeacherOutput, PolicyPatch  # noqa: F401
+from .types import TeacherInput, TeacherOutput, PolicyPatch, ConfigPatch  # noqa: F401
 from .interface import Teacher, DummyTeacher  # noqa: F401
 from .manager import TeacherManager  # noqa: F401
 
@@ -8,6 +8,7 @@ __all__ = [
     "TeacherInput",
     "TeacherOutput",
     "PolicyPatch",
+    "ConfigPatch",
     "Teacher",
     "DummyTeacher",
     "TeacherManager",

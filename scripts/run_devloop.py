@@ -6,7 +6,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
@@ -22,8 +22,17 @@ from me_core.learning import SimpleLearner
 from me_core.perception import TextPerception
 from me_core.policy import load_policy_from_file, policy_to_dict
 from me_core.policy.agents import AgentSpec
+from me_core.policy.applier import apply_policy_patches
 from me_core.self_model import SimpleSelfModel
-from me_core.tasks import ScenarioRegistry, run_scenario
+from me_core.tasks import (
+    ScenarioRegistry,
+    run_scenario,
+    ExperimentScenario,
+    ExperimentScenarioRegistry,
+    ExperimentStep,
+    run_experiment_scenario,
+    evaluate_experiment_results,
+)
 from me_core.teachers.factory import create_teacher_manager_from_config
 from me_core.teachers.types import TeacherInput
 from me_core.tools import (
@@ -37,6 +46,7 @@ from me_core.tools import (
     WriteFileTool,
 )
 from me_core.codetasks import CodeTaskPlanner, PromptGenerator
+from me_core.codetasks import apply_config_patches
 from me_core.workspace import RepoSpec, Workspace
 from me_core.world_model import SimpleWorldModel
 from me_ext.codellm import CodeLLMClient
@@ -155,8 +165,13 @@ def run_devloop(
     teacher_cfg: Dict[str, Any],
     codellm_cfg: Dict[str, Any],
     output: Path,
+    experiment_scenarios: Optional[List[ExperimentScenario]] = None,
 ) -> Dict[str, Any]:
     registry = ScenarioRegistry()
+    exp_registry = ExperimentScenarioRegistry()
+    if experiment_scenarios:
+        for sc in experiment_scenarios:
+            exp_registry.register(sc)
     teacher_manager = create_teacher_manager_from_config(teacher_cfg)
     agent = build_agent(agent_spec)
     codellm = CodeLLMClient(codellm_cfg)
@@ -201,6 +216,9 @@ def run_devloop(
             notes="devloop",
         )
         teacher_outputs = teacher_manager.gather_advice(teacher_input)
+        # 应用策略补丁（仅内存）
+        patches = teacher_manager.aggregate_patches(teacher_outputs)
+        agent_spec.policy = apply_policy_patches(agent_spec.policy, patches)
 
         tasks = planner.plan_tasks(
             repo_id=repo_id,
@@ -237,7 +255,58 @@ def run_devloop(
         results.append(record)
         with output.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    return {"results": results, "output": str(output)}
+
+    # 可选实验流程
+    experiment_results_all: List[Dict[str, Any]] = []
+    if experiment_scenarios:
+        for exp_sc in exp_registry.list_ids():
+            sc = exp_registry.get(exp_sc)
+            if sc is None:
+                continue
+            exp_results = run_experiment_scenario(workspace, sc)
+            score = evaluate_experiment_results(exp_results, sc.eval_formula or "0.0")
+            exp_record = {
+                "experiment_id": sc.id,
+                "score": score,
+                "steps": [
+                    {"repo_id": r.step.repo_id, "kind": r.step.kind, "metrics": r.metrics, "returncode": r.returncode}
+                    for r in exp_results
+                ],
+            }
+            experiment_results_all.append(exp_record)
+            if getattr(agent_spec.config, "enable_introspection", True):
+                agent.introspect(
+                    scenario_id=sc.id,
+                    start_step=getattr(agent.world_model, "current_step", 0),
+                    end_step=getattr(agent.world_model, "current_step", 0),
+                    notes="experiment",
+                    experiment_results=exp_results,
+                )
+            # Teacher 建议 + ConfigPatch
+            ti = TeacherInput(
+                scenario_id=sc.id,
+                episodes=[],
+                introspection=None,
+                current_config={
+                    "agent_config": agent_spec.config.__dict__,
+                    "policy": policy_to_dict(agent_spec.policy),
+                    "config_path": sc.steps[0].command[0] if sc.steps else "",
+                },
+                experiment_results=exp_results,
+                notes="experiment",
+            )
+            outs = teacher_manager.gather_advice(ti)
+            patches = teacher_manager.aggregate_patches(outs)
+            agent_spec.policy = apply_policy_patches(agent_spec.policy, patches)
+            config_patches = []
+            for o in outs:
+                config_patches.extend(o.config_patches)
+            if config_patches:
+                apply_config_patches(workspace, config_patches)
+            with output.open("a", encoding="utf-8") as f:
+                f.write(json.dumps({"experiment": exp_record, "teacher": [o.advice_text for o in outs]}, ensure_ascii=False) + "\n")
+
+    return {"results": results, "experiments": experiment_results_all, "output": str(output)}
 
 
 def main() -> None:
@@ -249,6 +318,7 @@ def main() -> None:
     parser.add_argument("--teacher-config", type=str, default=None, help="Teacher 配置 JSON 路径")
     parser.add_argument("--codellm-config", type=str, default=None, help="Code-LLM 配置 JSON 路径")
     parser.add_argument("--scenarios", type=str, default="self_intro", help="要运行的 scenario id，逗号分隔")
+    parser.add_argument("--experiment-scenarios", type=str, default="", help="实验场景 id（逗号），为空则不跑实验")
     parser.add_argument("--output", type=str, default="outputs/devloop_report.jsonl", help="输出 JSONL 路径")
     args = parser.parse_args()
 
@@ -262,6 +332,30 @@ def main() -> None:
     codellm_cfg = _load_json(args.codellm_config)
     scenario_ids = [s for s in args.scenarios.split(",") if s]
     output_path = Path(args.output)
+    exp_ids = [s for s in args.experiment_scenarios.split(",") if s]
+
+    experiment_scenarios: List[ExperimentScenario] = []
+    if exp_ids:
+        # 尝试根据 workspace meta 构造简单实验场景
+        targets = workspace.get_experiment_targets() or repo_list
+        target_repo = targets[0] if targets else repo_list[0]
+        for sid in exp_ids:
+            step = ExperimentStep(
+                repo_id=target_repo.id,
+                kind="train",
+                command=target_repo.meta.get("default_train_cmd", ["python", "-c", 'print("{\\"loss\\\":0.1}")']),
+                parse_mode="json",
+                metrics_keys=["loss"],
+            )
+            experiment_scenarios.append(
+                ExperimentScenario(
+                    id=sid,
+                    name=sid,
+                    description="auto experiment",
+                    steps=[step],
+                    eval_formula="1 - train_loss" if "train_loss" in step.metrics_keys else "0.0",
+                )
+            )
 
     summary = run_devloop(
         workspace=workspace,
@@ -271,6 +365,7 @@ def main() -> None:
         teacher_cfg=teacher_cfg,
         codellm_cfg=codellm_cfg,
         output=output_path,
+        experiment_scenarios=experiment_scenarios,
     )
     print(f"DevLoop 完成，结果写入 {summary['output']}")  # noqa: T201
 

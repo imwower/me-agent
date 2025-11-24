@@ -1,6 +1,9 @@
 from .types import Scenario, TaskResult, TaskStep  # noqa: F401
 from .registry import ScenarioRegistry, default_scenarios  # noqa: F401
 from .runner import run_scenario, run_scenarios  # noqa: F401
+from .experiment_types import ExperimentScenario, ExperimentStep, ExperimentResult  # noqa: F401
+from .experiment_registry import ExperimentScenarioRegistry  # noqa: F401
+from .experiment_runner import run_experiment_scenario, evaluate_experiment_results  # noqa: F401
 
 __all__ = [
     "TaskStep",
@@ -10,4 +13,10 @@ __all__ = [
     "default_scenarios",
     "run_scenario",
     "run_scenarios",
+    "ExperimentScenario",
+    "ExperimentStep",
+    "ExperimentResult",
+    "ExperimentScenarioRegistry",
+    "run_experiment_scenario",
+    "evaluate_experiment_results",
 ]

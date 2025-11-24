@@ -13,11 +13,18 @@ from me_core.learning import SimpleLearner
 from me_core.perception import TextPerception
 from me_core.policy.agents import AgentSpec
 from me_core.policy.applier import apply_policy_patches
-from me_core.tasks import ScenarioRegistry, run_scenario
+from me_core.tasks import (
+    ScenarioRegistry,
+    run_scenario,
+    ExperimentScenario,
+    run_experiment_scenario,
+    evaluate_experiment_results,
+)
 from me_core.tools import EchoTool, FileReadTool, HttpGetTool, SelfDescribeTool, TimeTool
 from me_core.world_model import SimpleWorldModel
 from me_core.teachers.manager import TeacherManager
 from me_core.teachers.types import TeacherInput
+from me_core.workspace import Workspace
 
 from .population import AgentPopulation
 from .types import AgentFitness
@@ -67,6 +74,9 @@ def evaluate_population(
     teacher_manager: Optional[TeacherManager],
     generations: int = 1,
     output_path: Optional[Path] = None,
+    experiment_scenarios: Optional[List[ExperimentScenario]] = None,
+    workspace: Optional[Workspace] = None,
+    experiment_weight: float = 0.5,
 ) -> Dict[str, AgentFitness]:
     registry = ScenarioRegistry()
     results: Dict[str, AgentFitness] = {}
@@ -78,6 +88,7 @@ def evaluate_population(
     for spec in population.get_specs():
         agent = build_agent_from_spec(spec)
         scenario_scores: Dict[str, float] = {}
+        experiment_scores: Dict[str, float] = {}
         introspection_notes: List[str] = []
 
         for sid in scenario_ids:
@@ -103,10 +114,23 @@ def evaluate_population(
                         patches = teacher_manager.aggregate_patches(outs)
                         spec.policy = apply_policy_patches(spec.policy, patches)
 
-        overall = sum(scenario_scores.values()) / len(scenario_scores) if scenario_scores else 0.0
+        # 实验评估
+        if experiment_scenarios and workspace:
+            for esc in experiment_scenarios:
+                exp_results = run_experiment_scenario(workspace, esc)
+                score = evaluate_experiment_results(exp_results, esc.eval_formula or "0.0")
+                experiment_scores[esc.id] = score
+
+        base_score = sum(scenario_scores.values()) / len(scenario_scores) if scenario_scores else 0.0
+        if experiment_scores:
+            exp_score = sum(experiment_scores.values()) / len(experiment_scores)
+            overall = experiment_weight * base_score + (1 - experiment_weight) * exp_score
+        else:
+            overall = base_score
         results[spec.id] = AgentFitness(
             spec_id=spec.id,
             scenario_scores=scenario_scores,
+            experiment_scores=experiment_scores,
             overall_score=overall,
             introspection_summaries=introspection_notes,
         )
@@ -116,6 +140,7 @@ def evaluate_population(
                     {
                         "spec_id": spec.id,
                         "scores": scenario_scores,
+                        "experiment_scores": experiment_scores,
                         "overall_score": overall,
                         "introspection": introspection_notes,
                     },

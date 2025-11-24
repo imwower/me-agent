@@ -2,9 +2,21 @@
   "repos": [
     {
       "id": "me-agent",
-      "name": "me-agent",
+      "name": "me-agent core",
       "path": ".",
-      "allowed_paths": ["."]
+      "allowed_paths": ["me_core", "me_ext", "scripts", "tests"],
+      "tags": ["me-agent", "orchestrator"]
+    },
+    {
+      "id": "self-snn",
+      "name": "Self-SNN",
+      "path": "/path/to/self-snn",
+      "allowed_paths": ["configs", "src", "scripts", "tests"],
+      "tags": ["snn", "experiment_target"],
+      "meta": {
+        "default_train_cmd": ["python", "scripts/train_xxx.py", "--config", "configs/xxx.json"],
+        "default_eval_cmd": ["python", "scripts/eval_xxx.py", "--config", "configs/xxx.json"]
+      }
     }
   ]
 }

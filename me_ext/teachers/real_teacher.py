@@ -8,7 +8,7 @@ from typing import List
 from urllib.parse import urlparse
 
 from me_core.teachers.interface import Teacher
-from me_core.teachers.types import PolicyPatch, TeacherInput, TeacherOutput
+from me_core.teachers.types import ConfigPatch, PolicyPatch, TeacherInput, TeacherOutput
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,15 @@ class RealTeacher(Teacher):
             "introspection": ti.introspection.to_dict() if ti.introspection else None,
             "current_config": ti.current_config,
             "notes": ti.notes,
+            "experiment_results": [
+                {
+                    "repo_id": r.step.repo_id,
+                    "kind": r.step.kind,
+                    "metrics": r.metrics,
+                    "returncode": r.returncode,
+                }
+                for r in (ti.experiment_results or [])
+            ],
         }
         prompt = (
             "你是一个策略老师，请根据以下 JSON 给出改进建议，并返回 JSON，其中包含 advice 文本和 patches。"
@@ -73,8 +82,9 @@ class RealTeacher(Teacher):
         )
         return prompt
 
-    def _parse_patches_from_response(self, response: str) -> List[PolicyPatch]:
+    def _parse_patches_from_response(self, response: str) -> tuple[List[PolicyPatch], List[ConfigPatch]]:
         patches: List[PolicyPatch] = []
+        config_patches: List[ConfigPatch] = []
         try:
             obj = json.loads(response)
             patch_items = obj.get("patches") or []
@@ -89,9 +99,22 @@ class RealTeacher(Teacher):
                         reason=str(item.get("reason") or ""),
                     )
                 )
+            cfg_items = obj.get("config_patches") or []
+            for item in cfg_items:
+                if not isinstance(item, dict):
+                    continue
+                config_patches.append(
+                    ConfigPatch(
+                        repo_id=str(item.get("repo_id") or ""),
+                        config_path=str(item.get("config_path") or ""),
+                        path=str(item.get("path") or ""),
+                        value=item.get("value"),
+                        reason=str(item.get("reason") or ""),
+                    )
+                )
         except Exception:
             logger.warning("解析 Teacher 响应失败，返回空补丁。")
-        return patches
+        return patches, config_patches
 
     def generate_advice(self, ti: TeacherInput) -> TeacherOutput:
         prompt = self._build_prompt(ti)
@@ -100,10 +123,11 @@ class RealTeacher(Teacher):
             raw = self._call_http_llm(prompt)
         else:
             raw = self._call_cli_llm(prompt)
-        patches = self._parse_patches_from_response(raw)
+        patches, config_patches = self._parse_patches_from_response(raw)
         return TeacherOutput(
             advice_text=raw,
             policy_patches=patches,
+            config_patches=config_patches,
             meta={"raw_response": raw, "mode": mode},
         )
 

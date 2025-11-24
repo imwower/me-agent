@@ -465,10 +465,16 @@ class SimpleAgent(BaseAgent):
         end_step: Optional[int] = None,
         test_failures: Optional[List[str]] = None,
         notes: Optional[str] = None,
+        experiment_results: Optional[List[Any]] = None,
     ) -> Optional[IntrospectionLog]:
         if self.introspection_generator is None:
             return None
         final_step = end_step if end_step is not None else getattr(self.world_model, "current_step", start_step)
         return self.introspection_generator.generate(
-            scenario_id=scenario_id, start_step=start_step, end_step=final_step, test_failures=test_failures, notes=notes
+            scenario_id=scenario_id,
+            start_step=start_step,
+            end_step=final_step,
+            test_failures=test_failures,
+            notes=notes,
+            experiment_results=experiment_results,
         )

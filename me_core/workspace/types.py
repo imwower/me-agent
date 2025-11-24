@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Set
+from typing import Any, List, Optional, Set
 
 
 @dataclass
@@ -11,6 +11,7 @@ class RepoSpec:
     path: str
     allowed_paths: List[str]
     tags: Set[str] = field(default_factory=set)
+    meta: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

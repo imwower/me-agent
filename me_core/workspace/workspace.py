@@ -23,19 +23,27 @@ class Workspace:
     def list_repos(self) -> List[RepoSpec]:
         return list(self.specs.values())
 
+    def get_repos_by_tag(self, tag: str) -> List[RepoSpec]:
+        return [spec for spec in self.specs.values() if tag in spec.tags]
+
+    def get_experiment_targets(self) -> List[RepoSpec]:
+        return [spec for spec in self.specs.values() if "experiment_target" in spec.tags]
+
     @classmethod
     def from_json(cls, path: str | Path) -> "Workspace":
         p = Path(path)
         data = json.loads(p.read_text(encoding="utf-8"))
         specs = []
         for item in data.get("repos", []):
+            tags = set(item.get("tags", []) or [])
             specs.append(
                 RepoSpec(
                     id=item["id"],
                     name=item.get("name", item["id"]),
                     path=item["path"],
                     allowed_paths=item.get("allowed_paths", ["."]),
-                    tags=set(item.get("tags", []) or []),
+                    tags=tags,
+                    meta=dict(item.get("meta", {}) or {}),
                 )
             )
         return cls(specs)

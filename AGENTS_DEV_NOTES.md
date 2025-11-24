@@ -198,6 +198,16 @@
 - DevLoop：`scripts/run_devloop.py` 串联 Scenario → 内省 → Teacher → Code-LLM → 写回 → 跑单测的自改流水线。  
 - TODO：引入代码任务优先级到种群演化，支持跨仓库协同，把 DevLoop 结果反馈到外部训练/强化学习流程。
 
+## R6: Experiment Orchestrator
+
+- Workspace RepoSpec 支持 tags/meta，标记 experiment_target 仓库并附带默认 train/eval 命令。  
+- ExperimentScenario/Runner：train/eval/custom 步骤支持 regex/json/plain 指标解析与 eval_formula 评分。  
+- Teacher/ConfigPatch：TeacherInput 包含实验结果，TeacherOutput 支持 ConfigPatch，Dummy/Real Teacher 可提出超参/配置修改。  
+- Config 补丁：`apply_config_patches` 目前支持 JSON 配置文件的点路径修改。  
+- DevLoop 实验模式：可跑实验场景、解析指标、应用 Teacher 改策略/配置，再执行命令/单测并记录。  
+- Population Fitness：种群评估加入实验分权重；整体分 = 场景分与实验分的加权平均。  
+- 下一步：更强的日志/指标解析、支持多阶段实验 pipeline、针对 self-snn/多模态后端的能耗/性能指标深度融合。
+
 ---
 
 后续改造计划（简要）：
