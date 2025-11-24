@@ -220,6 +220,14 @@ python scripts/demo_cli_agent.py
 - 长期自述与仪表盘：`scripts/dump_self_report.py` 生成长期自我总结；`scripts/view_experiments_dashboard.py` 汇总场景/实验得分。
 - 配置健康检查：`scripts/check_config_health.py` 校验 workspace/AgentConfig 必要字段，缺失时给出 error/warning。
 
+## R10: 自动工具发现 + 人类 Teacher + 多角色协作 + 基准测试
+
+- 仓库发现：`me_core/workspace/discovery.py` 扫描本地 scripts，生成 RepoProfile；`scripts/discover_repos.py` 可自动输出 workspace.generated.json。
+- 人类 Teacher：HumanTeacher 支持 CLI/文件输入手写 JSON 建议，可与 LLM Teacher 共存。
+- 角色化多 Agent：AgentRoleConfig/ROLES_DEFAULT + MultiAgentCoordinator，按 planner/coder/tester/brain/critic 分工协作。
+- 基准场景：新增 `benchmark_scenarios`（小型多模态占位），可用于快速跑通 benchmark 模式。
+- 总控脚本：`scripts/run_orchestrator.py` 一键 orchestrate（自动发现/benchmark/devloop/多 Agent/brain）。
+
 ### 下载 CIFAR-100 数据集（Python 版）
 
 用于 `scripts/train_cifar100_cnn.py` 的示例数据，可直接用仓库脚本下载并解压到 `data/cifar100`：

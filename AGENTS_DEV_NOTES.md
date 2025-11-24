@@ -237,6 +237,14 @@
 - 自我总结与仪表盘：generate_long_term_report + dump_self_report.py；view_experiments_dashboard.py 汇总 JSONL 报告。  
 - 配置自检：check_config_health.py 校验 workspace/AgentConfig，发现缺失字段时报错或告警。
 
+## R10: Auto Discovery + Human Teacher + Multi-Agent + Benchmark
+
+- workspace discovery：RepoProfile/scan_local_repo_for_tools，生成 workspace 草稿（scripts/discover_repos.py）。  
+- HumanTeacher：CLI/文件输入 JSON 建议，融入 Teacher pipeline。  
+- Multi-Agent：角色配置 + MultiAgentCoordinator，分工 planner/coder/tester/brain/critic 协作处理任务。  
+- Benchmark：新增 benchmark_scenarios（小型 VQA 占位），run_orchestrator 支持 benchmark/devloop/population 入口。  
+- Orchestrator：统一入口参数控制自动发现/brain-mode/多 Agent/benchmark，输出 JSON 报告。  
+
 ---
 
 后续改造计划（简要）：

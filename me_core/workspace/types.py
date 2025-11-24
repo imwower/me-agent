@@ -28,3 +28,14 @@ class RepoStatus:
     dirty: bool
     last_commit: Optional[str]
     last_test_result: Optional[str] = None
+
+
+@dataclass
+class RepoProfile:
+    id: str
+    name: str
+    path: str
+    tags: Set[str] = field(default_factory=set)
+    detected_tools: List[str] = field(default_factory=list)
+    detected_scripts: List[str] = field(default_factory=list)
+    notes: str = ""

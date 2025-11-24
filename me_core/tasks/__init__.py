@@ -4,6 +4,7 @@ from .runner import run_scenario, run_scenarios  # noqa: F401
 from .experiment_types import ExperimentScenario, ExperimentStep, ExperimentResult  # noqa: F401
 from .experiment_registry import ExperimentScenarioRegistry  # noqa: F401
 from .experiment_runner import run_experiment_scenario, evaluate_experiment_results  # noqa: F401
+from .benchmark_scenarios import list_benchmark_scenarios  # noqa: F401
 
 __all__ = [
     "TaskStep",
@@ -19,4 +20,5 @@ __all__ = [
     "ExperimentScenarioRegistry",
     "run_experiment_scenario",
     "evaluate_experiment_results",
+    "list_benchmark_scenarios",
 ]

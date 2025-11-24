@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, Literal
+import json
+from pathlib import Path
 
 from .types import ConfigPatch, PolicyPatch, TeacherInput, TeacherOutput
 
@@ -69,4 +71,74 @@ class DummyTeacher:
         )
 
 
-__all__ = ["Teacher", "DummyTeacher"]
+class HumanTeacher:
+    """人类在环 Teacher，可通过 CLI 或文件输入 JSON 建议。"""
+
+    name = "human_teacher"
+
+    def __init__(self, input_mode: Literal["cli", "file"] = "cli", file_path: str | None = None) -> None:
+        self.input_mode = input_mode
+        self.file_path = file_path
+
+    def generate_advice(self, ti: TeacherInput) -> TeacherOutput:
+        summary = {
+            "scenario_id": ti.scenario_id,
+            "notes": ti.notes,
+            "brain_snapshot": getattr(ti, "brain_snapshot", None),
+        }
+        if self.input_mode == "file":
+            path = Path(self.file_path or "human_teacher.json")
+            tpl = {
+                "advice_text": "请填写建议",
+                "policy_patches": [],
+                "config_patches": [],
+            }
+            if not path.exists() or not path.read_text(encoding="utf-8"):
+                path.write_text(json.dumps({"summary": summary, "template": tpl}, ensure_ascii=False, indent=2), encoding="utf-8")
+            # 若文件已存在且有内容，直接读取，避免阻塞测试
+            if path.read_text(encoding="utf-8").strip():
+                raw = path.read_text(encoding="utf-8")
+            else:
+                print(f"请编辑 {path} 后回车继续")  # noqa: T201
+                input()
+                raw = path.read_text(encoding="utf-8")
+        else:
+            print("=== HumanTeacher 摘要 ===")  # noqa: T201
+            print(json.dumps(summary, ensure_ascii=False, indent=2))  # noqa: T201
+            print("请输入 TeacherOutput JSON（回车跳过补丁）:")  # noqa: T201
+            raw = input().strip()
+
+        try:
+            obj = json.loads(raw) if raw else {}
+            advice = str(obj.get("advice_text") or obj.get("advice") or "human advice")
+            patches = []
+            for item in obj.get("policy_patches") or []:
+                if not isinstance(item, dict) or "path" not in item or "value" not in item:
+                    continue
+                patches.append(
+                    PolicyPatch(
+                        target=str(item.get("target") or "drives"),
+                        path=str(item.get("path") or ""),
+                        value=item.get("value"),
+                        reason=str(item.get("reason") or ""),
+                    )
+                )
+            cfg_patches = []
+            for item in obj.get("config_patches") or []:
+                if not isinstance(item, dict) or "path" not in item or "value" not in item:
+                    continue
+                cfg_patches.append(
+                    ConfigPatch(
+                        repo_id=str(item.get("repo_id") or ""),
+                        config_path=str(item.get("config_path") or ""),
+                        path=str(item.get("path") or ""),
+                        value=item.get("value"),
+                        reason=str(item.get("reason") or ""),
+                    )
+                )
+            return TeacherOutput(advice_text=advice, policy_patches=patches, config_patches=cfg_patches, meta={"human": True})
+        except Exception:
+            return TeacherOutput(advice_text=raw or "human advice", policy_patches=[], meta={"human": True})
+
+
+__all__ = ["Teacher", "DummyTeacher", "HumanTeacher"]
