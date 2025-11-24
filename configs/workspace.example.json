@@ -15,10 +15,12 @@
       "tags": ["snn", "experiment_target", "brain"],
       "meta": {
         "structure_script": ["python", "scripts/dump_brain_graph.py"],
-        "energy_script": ["python", "scripts/eval_energy.py", "--config", "configs/brain.yaml"],
-        "memory_script": ["python", "scripts/eval_memory.py", "--config", "configs/brain.yaml"],
+        "energy_script": ["python", "scripts/eval_router_energy.py", "--json"],
+        "memory_script": ["python", "scripts/eval_memory.py", "--json"],
+        "brain_infer_script": ["python", "scripts/run_brain_infer.py"],
         "default_train_cmd": ["python", "scripts/train_xxx.py", "--config", "configs/xxx.json"],
-        "default_eval_cmd": ["python", "scripts/eval_xxx.py", "--config", "configs/xxx.json"]
+        "default_eval_cmd": ["python", "scripts/eval_xxx.py", "--config", "configs/xxx.json"],
+        "default_config": "configs/agency.yaml"
       }
     }
   ]

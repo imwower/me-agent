@@ -21,6 +21,7 @@ class TeacherInput:
     notes: Optional[str] = None
     experiment_results: Optional[List[ExperimentResult]] = None
     brain_graph: Optional["BrainGraph"] = None
+    brain_snapshot: Any | None = None
 
 
 @dataclass

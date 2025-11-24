@@ -84,6 +84,20 @@ def default_scenarios() -> List[Scenario]:
             ],
             eval_config={"case_insensitive": True},
         ),
+        Scenario(
+            id="brain_guided_decision",
+            name="SNN 引导策略决策场景",
+            description="在回答前调用 self-snn 在线脑推理，根据脑状态调整回答风格。",
+            steps=[
+                TaskStep(
+                    user_input="你现在处于信息不足、不确定性较高的环境，请先思考再给出策略建议。",
+                    expected_keywords=["探索", "收集信息", "先观察"],
+                    eval_config={"mode": "contains_any"},
+                )
+            ],
+            eval_config={"case_insensitive": True},
+            requires_brain_infer=True,
+        ),
     ]
 
 

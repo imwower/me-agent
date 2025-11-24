@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -25,6 +26,7 @@ from me_core.policy.agents import AgentSpec
 from me_core.policy.applier import apply_policy_patches
 from me_core.self_model import SimpleSelfModel
 from me_core.tasks import (
+    Scenario,
     ScenarioRegistry,
     run_scenario,
     ExperimentScenario,
@@ -42,6 +44,7 @@ from me_core.tools import (
     DumpBrainGraphTool,
     EvalBrainEnergyTool,
     EvalBrainMemoryTool,
+    BrainInferTool,
     ReadFileTool,
     RunTestsTool,
     SelfDescribeTool,
@@ -52,6 +55,7 @@ from me_core.codetasks import CodeTaskPlanner, PromptGenerator
 from me_core.codetasks import apply_config_patches
 from me_core.workspace import RepoSpec, Workspace
 from me_core.world_model import SimpleWorldModel
+from me_core.brain import BrainSnapshot
 from me_ext.codellm import CodeLLMClient
 
 
@@ -183,6 +187,50 @@ def run_devloop(
     prompt_generator = PromptGenerator()
     test_tool = RunTestsTool(workspace)
     brain_summary: str | None = None
+    brain_snapshots: List[BrainSnapshot] = []
+
+    def _run_online_brain_infer(scenario: Scenario) -> None:
+        """在脑模式下执行一次在线脑推理，并写入 world/self。"""
+
+        nonlocal brain_summary
+        brain_repos = workspace.get_brain_repos()
+        target_repo = brain_repos[0] if brain_repos else None
+        if not target_repo:
+            return
+        infer_tool = BrainInferTool(workspace)
+        text_summary = scenario.steps[0].user_input if getattr(scenario, "steps", None) else scenario.description
+        cfg_path = None
+        if getattr(target_repo, "meta", None):
+            cfg_path = target_repo.meta.get("brain_config") or target_repo.meta.get("default_config")
+        res = infer_tool.run(
+            {
+                "repo_id": target_repo.id,
+                "task_id": scenario.id,
+                "text": text_summary or scenario.description,
+                "features": {"uncertainty": 1.0} if getattr(scenario, "requires_brain_infer", False) else {},
+                "config_path": cfg_path or "configs/agency.yaml",
+            }
+        )
+        snap_data = res.get("snapshot")
+        if not snap_data:
+            return
+        snapshot = BrainSnapshot(
+            repo_id=snap_data.get("repo_id", target_repo.id),
+            region_activity=snap_data.get("region_activity", {}) or {},
+            global_metrics=snap_data.get("global_metrics", {}) or {},
+            memory_summary=snap_data.get("memory_summary", {}) or {},
+            decision_hint=snap_data.get("decision_hint", {}) or {},
+            created_at=float(snap_data.get("created_at", time.time()) or time.time()),
+        )
+        if hasattr(agent.world_model, "update_brain_snapshot"):
+            agent.world_model.update_brain_snapshot(snapshot)  # type: ignore[arg-type]
+        if hasattr(agent.self_model, "observe_brain_snapshot"):
+            agent.self_model.observe_brain_snapshot(snapshot)  # type: ignore[arg-type]
+        brain_snapshots.append(snapshot)
+        nonlocal brain_summary
+        if not brain_summary:
+            mode = snapshot.decision_hint.get("mode") if isinstance(snapshot.decision_hint, dict) else None
+            brain_summary = f"在线脑态: mode={mode}, κ={snapshot.global_metrics.get('branching_kappa')}"
 
     # brain mode: 尝试获取脑结构/能耗/记忆信息
     if brain_mode:
@@ -207,6 +255,8 @@ def run_devloop(
         scenario = registry.get(sid)
         if scenario is None:
             continue
+        if brain_mode or getattr(scenario, "requires_brain_infer", False):
+            _run_online_brain_infer(scenario)
         start_step = getattr(agent.world_model, "current_step", 0) + 1
         task_result = run_scenario(agent, scenario)
         end_step = getattr(agent.world_model, "current_step", start_step)
@@ -236,6 +286,7 @@ def run_devloop(
             },
             notes="devloop",
             brain_graph=None,
+            brain_snapshot=brain_snapshots[-1] if brain_snapshots else None,
         )
         teacher_outputs = teacher_manager.gather_advice(teacher_input)
         # 应用策略补丁（仅内存）
@@ -328,7 +379,17 @@ def run_devloop(
             with output.open("a", encoding="utf-8") as f:
                 f.write(json.dumps({"experiment": exp_record, "teacher": [o.advice_text for o in outs]}, ensure_ascii=False) + "\n")
 
-    return {"results": results, "experiments": experiment_results_all, "output": str(output)}
+    brain_snapshots_dict = [
+        {
+            "repo_id": s.repo_id,
+            "region_activity": s.region_activity,
+            "global_metrics": s.global_metrics,
+            "decision_hint": s.decision_hint,
+            "created_at": s.created_at,
+        }
+        for s in brain_snapshots
+    ]
+    return {"results": results, "experiments": experiment_results_all, "output": str(output), "brain_snapshots": brain_snapshots_dict}
 
 
 def main() -> None:

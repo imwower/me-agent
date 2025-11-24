@@ -78,6 +78,12 @@ class RuleBasedDialoguePolicy(BaseDialoguePolicy):
             except Exception:
                 pass
         self_desc = self_model.describe_self(world_model=world, max_concepts=max_concepts)
+        state = self_model.get_state()
+        brain_mode = getattr(state, "last_brain_mode", "unknown")
+        brain_conf = float(getattr(state, "last_brain_confidence", 0.0) or 0.0)
+        brain_hint = ""
+        if brain_mode and brain_mode != "unknown":
+            brain_hint = f"【脑态】当前内部脑模式偏向{brain_mode}，信心约 {brain_conf:.2f}。"
 
         if intent.kind == "reflect_self":
             return self_model.describe_self(world_model=world)
@@ -98,7 +104,7 @@ class RuleBasedDialoguePolicy(BaseDialoguePolicy):
         if intent.kind == "curiosity":
             target = intent.extra.get("concept_name") if intent.extra else None
             preferred = intent.preferred_modality or "更多信息"
-            return f"我对「{target or '这个概念'}」很好奇，想获取{preferred}，以后有机会再进一步理解。"
+            return f"我对「{target or '这个概念'}」很好奇，想获取{preferred}，以后有机会再进一步理解。{brain_hint}"
 
         parts: list[str] = []
 
@@ -120,5 +126,7 @@ class RuleBasedDialoguePolicy(BaseDialoguePolicy):
         else:
             parts.append("【我要】直接回答你的问题。")
 
+        if brain_hint:
+            parts.append(brain_hint)
         parts.append(f"【我做】{self_desc}")
         return " ".join(parts)

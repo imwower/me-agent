@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Set
 from me_core.alignment.concepts import ConceptId, ConceptNode, ConceptSpace
 from me_core.event_stream import EventHistory
 from me_core.types import AgentEvent, EventKind
+from me_core.brain import BrainSnapshot
 
 
 class BaseWorldModel(ABC):
@@ -60,6 +61,8 @@ class SimpleWorldModel(BaseWorldModel):
     timeline_limit: int = 500
     _timeline: List[TimedEvent] = field(default_factory=list, init=False, repr=False)
     _current_step: int = field(default=0, init=False, repr=False)
+    last_brain_snapshot: Optional[BrainSnapshot] = field(default=None, init=False, repr=False)
+    brain_snapshot_history: List[BrainSnapshot] = field(default_factory=list, init=False, repr=False)
 
     def update(self, events: List[AgentEvent]) -> None:
         """将新事件写入历史，并更新工具统计。"""
@@ -137,7 +140,15 @@ class SimpleWorldModel(BaseWorldModel):
             "events": events_summary,
             "tools": tools_summary,
             "concepts": concept_summary,
-            }
+            "brain": {
+                "last_mode": getattr(self.last_brain_snapshot, "decision_hint", {}).get("mode")
+                if self.last_brain_snapshot
+                else None,
+                "last_global_metrics": getattr(self.last_brain_snapshot, "global_metrics", {})
+                if self.last_brain_snapshot
+                else {},
+            },
+        }
 
     # 新增：概念相关观测接口 --------------------------------------------------------
 
@@ -268,3 +279,12 @@ class SimpleWorldModel(BaseWorldModel):
             if node is not None:
                 results.append((node, stats))
         return results
+
+    def update_brain_snapshot(self, snapshot: BrainSnapshot, max_history: int = 5) -> None:
+        """记录最新的 BrainSnapshot，为驱动力与对话提供参考。"""
+
+        self.last_brain_snapshot = snapshot
+        self.brain_snapshot_history.append(snapshot)
+        if max_history > 0 and len(self.brain_snapshot_history) > max_history:
+            overflow = len(self.brain_snapshot_history) - max_history
+            del self.brain_snapshot_history[0:overflow]

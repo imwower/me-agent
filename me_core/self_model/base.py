@@ -11,6 +11,7 @@ from .self_updater import update_from_event
 
 if TYPE_CHECKING:
     from me_core.world_model.base import SimpleWorldModel
+    from me_core.brain.types import BrainSnapshot
 
 class BaseSelfModel(ABC):
     """自我模型基类。
@@ -36,6 +37,10 @@ class BaseSelfModel(ABC):
     @abstractmethod
     def get_state(self) -> SelfState:
         """获取底层自我状态对象，便于外部检查或持久化。"""
+
+    def observe_brain_snapshot(self, snapshot: "BrainSnapshot") -> None:
+        """可选钩子：观察脑状态摘要，基类默认不处理。"""
+        _ = snapshot
 
 
 class SimpleSelfModel(BaseSelfModel):
@@ -112,6 +117,11 @@ class SimpleSelfModel(BaseSelfModel):
             actions = "、".join(self._state.last_actions[-3:])
             segments.append(f"最近在忙：{actions}")
 
+        if self._state.last_brain_mode and self._state.last_brain_mode != "unknown":
+            segments.append(
+                f"内部脑模式倾向{self._state.last_brain_mode}，信心约 {self._state.last_brain_confidence:.2f}"
+            )
+
         if world_model is not None:
             concepts = getattr(world_model, "top_concepts", lambda top_k=3: [])(top_k=max_concepts)
             if concepts:
@@ -127,6 +137,17 @@ class SimpleSelfModel(BaseSelfModel):
         """返回当前自我状态。"""
 
         return self._state
+
+    def observe_brain_snapshot(self, snapshot: "BrainSnapshot") -> None:
+        """吸收脑状态摘要，记录最近的脑模式与信心。"""
+
+        try:
+            hint = getattr(snapshot, "decision_hint", {}) or {}
+            self._state.last_brain_mode = str(hint.get("mode", "unknown"))
+            self._state.last_brain_confidence = float(hint.get("confidence", 0.0) or 0.0)
+        except Exception:
+            self._state.last_brain_mode = "unknown"
+            self._state.last_brain_confidence = 0.0
 
     def register_capability_tag(self, tag: str) -> None:
         """为自我状态添加一个能力标签。"""

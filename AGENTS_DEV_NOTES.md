@@ -218,6 +218,16 @@
 - Population：Fitness 纳入 brain 指标（能耗/记忆等）。  
 - TODO：更精细的脑图谱标签、能耗模型、跨 brain 版本对比、结构搜索。
 
+## R8: Online Brain Inference & Snapshot Chain
+
+- BrainSnapshot 类型：region_activity/global_metrics/memory_summary/decision_hint，带 created_at。  
+- BrainInferTool：调用 brain 仓库的 `scripts/run_brain_infer.py`，在场景执行前获得在线脑态。  
+- 世界/自我模型：SimpleWorldModel 记录 last_brain_snapshot 与历史；SimpleSelfModel 将脑模式写入 last_brain_mode/last_brain_confidence。  
+- 驱动力/对话：SimpleDriveSystem 根据脑模式微调意图优先级（探索/利用/稳定），RuleBasedDialoguePolicy 在回复中加入“脑态”解释。  
+- 场景与 DevLoop：新增 `brain_guided_decision`（requires_brain_infer）；DevLoop 在 brain-mode 下先跑 brain_infer，再跑场景/Teacher/CodeTask，summary 返回 brain_snapshots。  
+- Workspace 示例：meta 增加 brain_infer_script/default_config，用于 BrainInferTool 默认参数。  
+- 后续：考虑更丰富的 memory_summary/decision_hint、长时间 brain rollout 与跨轮记忆对齐。
+
 ---
 
 后续改造计划（简要）：

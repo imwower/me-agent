@@ -92,6 +92,8 @@ class SimpleDriveSystem(BaseDriveSystem):
         now = datetime.now(timezone.utc)
         candidates: list[Intent] = []
         state = self_model.get_state()
+        brain_mode = getattr(state, "last_brain_mode", "unknown")
+        brain_conf = float(getattr(state, "last_brain_confidence", 0.0) or 0.0)
 
         def add(intent: Intent) -> None:
             candidates.append(intent)
@@ -201,6 +203,16 @@ class SimpleDriveSystem(BaseDriveSystem):
                     },
                 )
             )
+        elif self.enable_curiosity and brain_mode == "explore" and brain_conf > 0.5:
+            add(
+                Intent(
+                    kind="curiosity",
+                    priority=4,
+                    explanation="脑状态建议探索，先寻找更多信息。",
+                    message="跟进不确定点，收集信息",
+                    extra={"reason": "brain_mode_explore"},
+                )
+            )
 
         # 3. 根据 self_state 决定是否生成 reflect_self / inspect_world 候选
         current_step = getattr(world_model, "_current_step", 0)
@@ -244,7 +256,21 @@ class SimpleDriveSystem(BaseDriveSystem):
         if not candidates:
             return Intent(kind="stay_silent", priority=0, explanation="暂无候选意图。", extra={"reason": "empty"})
 
-        # 5. 按 priority 和简单的 tie-break 规则选出一个 Intent 返回
+        # 5. 若脑状态给出偏好，对候选意图做轻微调权
+        if brain_mode == "explore" and brain_conf > 0.5:
+            for cand in candidates:
+                if cand.kind in ("curiosity", "inspect_world", "reflect_self"):
+                    cand.priority += 1
+        elif brain_mode == "exploit" and brain_conf > 0.5:
+            for cand in candidates:
+                if cand.kind in ("reply", "call_tool"):
+                    cand.priority += 1
+        elif brain_mode == "chaotic":
+            for cand in candidates:
+                if cand.kind == "stay_silent":
+                    cand.priority += 1
+
+        # 6. 按 priority 和简单的 tie-break 规则选出一个 Intent 返回
         best = max(
             enumerate(candidates),
             key=lambda pair: (pair[1].priority, pair[0]),

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from typing import Any, Dict
 
@@ -32,4 +33,14 @@ class BrainMetric:
     meta: Dict[str, Any] = field(default_factory=dict)
 
 
-__all__ = ["BrainRegion", "BrainConnection", "BrainMetric"]
+@dataclass
+class BrainSnapshot:
+    repo_id: str
+    region_activity: Dict[str, float]
+    global_metrics: Dict[str, float]
+    memory_summary: Dict[str, Any]
+    decision_hint: Dict[str, Any]
+    created_at: float = field(default_factory=time.time)
+
+
+__all__ = ["BrainRegion", "BrainConnection", "BrainMetric", "BrainSnapshot"]

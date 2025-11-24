@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from typing import Any, Dict
+import sys
 
-from me_core.brain import BrainGraph, parse_brain_graph_from_json
+from me_core.brain import BrainGraph, BrainSnapshot, parse_brain_graph_from_json
 from me_core.tools.base import BaseTool, ToolSpec
 from me_core.workspace import Workspace
 
@@ -107,4 +108,78 @@ class EvalBrainMemoryTool:
         return {"capacity": capacity, "unit": unit, "raw": out + err}
 
 
-__all__ = ["DumpBrainGraphTool", "EvalBrainEnergyTool", "EvalBrainMemoryTool"]
+@dataclass(slots=True)
+class BrainInferTool(BaseTool):
+    workspace: Workspace
+    default_cfg: str = "configs/agency.yaml"
+    spec: ToolSpec = field(
+        default_factory=lambda: ToolSpec(
+            name="brain_infer",
+            description="调用 brain/snn 仓库的在线推理脚本 run_brain_infer.py，返回 BrainSnapshot 摘要。",
+            input_schema={
+                "repo_id": "string",
+                "task_id": "string",
+                "text": "string",
+                "features": "dict",
+                "config_path": "string",
+            },
+            output_schema={"snapshot": "dict"},
+        )
+    )
+
+    @property
+    def name(self) -> str:
+        return self.spec.name
+
+    def run(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        repo_id = params.get("repo_id", "self-snn")
+        task_id = params.get("task_id", "generic")
+        text = params.get("text", "")
+        features = params.get("features", {})
+        cfg_path = params.get("config_path", self.default_cfg)
+
+        repo = self.workspace.get_repo(repo_id)
+        cmd = None
+        if hasattr(repo, "spec") and getattr(repo.spec, "meta", None):
+            cmd = repo.spec.meta.get("brain_infer_script")
+        if not cmd:
+            cmd = [sys.executable, "scripts/run_brain_infer.py"]
+
+        args = [
+            "--config",
+            cfg_path,
+            "--task-id",
+            task_id,
+            "--text",
+            text,
+            "--features",
+            json.dumps(features, ensure_ascii=False),
+        ]
+        rc, out, err = repo.run_command(list(cmd) + args)
+        if rc != 0:
+            return {"error": err or "brain_infer_failed"}
+        try:
+            data = json.loads(out)
+        except Exception:
+            return {"error": "invalid_json", "raw": out}
+
+        snapshot = BrainSnapshot(
+            repo_id=repo_id,
+            region_activity=data.get("region_activity", {}) or {},
+            global_metrics=data.get("global_metrics", {}) or {},
+            memory_summary=data.get("memory_summary", {}) or {},
+            decision_hint=data.get("decision_hint", {}) or {},
+        )
+        return {
+            "snapshot": {
+                "repo_id": snapshot.repo_id,
+                "region_activity": snapshot.region_activity,
+                "global_metrics": snapshot.global_metrics,
+                "memory_summary": snapshot.memory_summary,
+                "decision_hint": snapshot.decision_hint,
+                "created_at": snapshot.created_at,
+            }
+        }
+
+
+__all__ = ["DumpBrainGraphTool", "EvalBrainEnergyTool", "EvalBrainMemoryTool", "BrainInferTool"]

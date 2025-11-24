@@ -27,3 +27,4 @@ class Scenario:
     description: str
     steps: List[TaskStep]
     eval_config: Dict[str, Any] = field(default_factory=dict)
+    requires_brain_infer: bool = False

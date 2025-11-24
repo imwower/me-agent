@@ -32,6 +32,8 @@ class SelfState:
     seen_modalities: Set[str] = field(default_factory=set)
     last_actions: List[str] = field(default_factory=list)
     last_step: int = 0
+    last_brain_mode: str = "unknown"
+    last_brain_confidence: float = 0.0
 
     def __post_init__(self) -> None:
         # 确保新老字段保持同步，避免两套记录分叉
@@ -66,6 +68,8 @@ class SelfState:
         data["seen_modalities"] = list(self.seen_modalities)
         data["last_actions"] = list(self.last_actions)
         data["last_step"] = int(self.last_step)
+        data["last_brain_mode"] = self.last_brain_mode
+        data["last_brain_confidence"] = float(self.last_brain_confidence)
         return data
 
     @classmethod
@@ -91,6 +95,8 @@ class SelfState:
             ),
             last_actions=list(data.get("last_actions", []) or []),
             last_step=int(data.get("last_step", 0) or 0),
+            last_brain_mode=str(data.get("last_brain_mode", "unknown")),
+            last_brain_confidence=float(data.get("last_brain_confidence", 0.0) or 0.0),
         )
 
 

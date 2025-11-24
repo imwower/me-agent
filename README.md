@@ -203,6 +203,15 @@ python scripts/demo_cli_agent.py
 - 内省 & Teacher：支持脑结构/能耗/记忆信息，生成结构/配置建议（含 ConfigPatch）。
 - DevLoop brain 模式：`scripts/run_devloop.py --brain-mode` 先拉取脑结构/能耗/记忆，再跑实验、应用 Teacher/Code-LLM 改配置/代码。
 - Population：Fitness 纳入 brain 指标（能耗、记忆容量等）与实验分权重。
+
+## R8: Online Brain Inference & Brain-Guided Decisions
+
+- 在线脑推理：self-snn 增加 `scripts/run_brain_infer.py`，从结构化 BrainInput 运行短暂 SNN，输出 BrainSnapshot JSON。
+- BrainInferTool：`brain_infer` 工具调用上述脚本，将 snapshot 返回 Agent 端使用。
+- BrainSnapshot：类型定义 + 世界/自我模型存储接口，驱动力/对话策略可依据脑模式（explore/exploit 等）调整。
+- 场景：新增 `brain_guided_decision`，执行前自动触发 brain_infer，回复会带上“根据当前脑状态”的解释。
+- DevLoop：`--brain-mode` 下在跑场景前调用 BrainInferTool，写入 world/self，report 中返回 brain_snapshots。
+
 ### 下载 CIFAR-100 数据集（Python 版）
 
 用于 `scripts/train_cifar100_cnn.py` 的示例数据，可直接用仓库脚本下载并解压到 `data/cifar100`：
