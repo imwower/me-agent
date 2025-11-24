@@ -33,6 +33,9 @@ class StatusHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self) -> None:  # noqa: N802
+        if self.path in {"/", "/dashboard"}:
+            self._serve_static("/static/index.html")
+            return
         if self.path.startswith("/static/"):
             self._serve_static(self.path)
             return
