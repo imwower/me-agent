@@ -236,6 +236,24 @@ python scripts/demo_cli_agent.py
 - 联合进化：CoEvoPlanner/CoEvoState 组织 AgentPopulation 与 self-snn 训练计划，`scripts/run_coevolution.py` 运行多代，`scripts/view_coevo_dashboard.py` 查看分数曲线。
 - 可视化与检索：LogIndex/查询脚本、协作视图、Dashboard 结合，便于长期跟踪自演化进程。
 
+## 快速启动（接 self-snn 示例）
+
+1) 配置 workspace：`configs/workspace.example.json` 已填好 self-snn 路径 `/Users/george/code/github/self-snn`，允许访问 configs/scripts/self_snn/tests/runs，默认训练/评估/brain 脚本都指向 self-snn。
+2) 直接运行一轮 brain-mode devloop（含自我/脑工具）：  
+   ```bash
+   bash scripts/start_me_agent.sh
+   ```  
+   如需自定义路径或场景，调整 workspace 路径或修改脚本参数。  
+3) 单独调用自定义 orchestrator：  
+   ```bash
+   python scripts/run_orchestrator.py \
+     --workspace configs/workspace.example.json \
+     --mode devloop \
+     --use-brain \
+     --scenarios self_intro
+   ```  
+   workspace 中的 meta 会调用 self-snn 的训练/评估/脑推理脚本。
+
 ### 下载 CIFAR-100 数据集（Python 版）
 
 用于 `scripts/train_cifar100_cnn.py` 的示例数据，可直接用仓库脚本下载并解压到 `data/cifar100`：
