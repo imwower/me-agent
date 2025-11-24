@@ -110,6 +110,35 @@ class EpisodicMemory:
             return []
         return list(self._episodes[-max_count:])
 
+    def compress_old_episodes(self, max_keep: int = 1000) -> None:
+        """
+        简易压缩：保留最近 max_keep 条，并额外保留含重要标签的若干条。
+        """
+
+        if len(self._episodes) <= max_keep:
+            return
+        important = [ep for ep in self._episodes if ep.tags.intersection({"important", "brain", "experiment"})]
+        recent = self._episodes[-max_keep:]
+        merged_ids = {ep.id for ep in recent}
+        for ep in important:
+            if ep.id not in merged_ids:
+                recent.append(ep)
+        self._episodes = recent[-max_keep:]
+        try:
+            # 覆盖存储为近似压缩效果
+            self.storage.save_episode(
+                Episode(
+                    id="compression_marker",
+                    start_step=0,
+                    end_step=0,
+                    events=[],
+                    summary="compressed_old_episodes",
+                    tags={"maintenance"},
+                )
+            )
+        except Exception:
+            pass
+
     def search(self, keyword: str, max_count: int = 50) -> List[Episode]:
         keyword_lower = keyword.lower()
         results: List[Episode] = []

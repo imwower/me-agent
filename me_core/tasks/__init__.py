@@ -5,6 +5,8 @@ from .experiment_types import ExperimentScenario, ExperimentStep, ExperimentResu
 from .experiment_registry import ExperimentScenarioRegistry  # noqa: F401
 from .experiment_runner import run_experiment_scenario, evaluate_experiment_results  # noqa: F401
 from .benchmark_scenarios import list_benchmark_scenarios  # noqa: F401
+from .bench_multimodal import load_multimodal_benchmark  # noqa: F401
+from .bench_codefix import load_codefix_tasks  # noqa: F401
 
 __all__ = [
     "TaskStep",
@@ -21,4 +23,6 @@ __all__ = [
     "run_experiment_scenario",
     "evaluate_experiment_results",
     "list_benchmark_scenarios",
+    "load_multimodal_benchmark",
+    "load_codefix_tasks",
 ]
