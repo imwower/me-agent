@@ -5,6 +5,18 @@ from pathlib import Path
 from typing import Tuple
 
 import matplotlib.pyplot as plt
+from matplotlib import rcParams
+
+# 尝试设置常见中文字体，避免中文乱码/缺字警告；用户可通过环境变量 PLOT_FONT_FAMILY 覆盖
+_font_candidates = [
+    os.environ.get("PLOT_FONT_FAMILY"),
+    "Noto Sans CJK SC",
+    "Microsoft YaHei",
+    "SimHei",
+    "Arial Unicode MS",
+]
+rcParams["font.sans-serif"] = [f for f in _font_candidates if f]
+rcParams["axes.unicode_minus"] = False
 
 from me_core.research.plot_types import PlotSpec
 
