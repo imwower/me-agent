@@ -228,6 +228,15 @@
 - Workspace 示例：meta 增加 brain_infer_script/default_config，用于 BrainInferTool 默认参数。  
 - 后续：考虑更丰富的 memory_summary/decision_hint、长时间 brain rollout 与跨轮记忆对齐。
 
+## R9: Real Backend + 安全沙箱 + 可观测性
+
+- RealEmbeddingBackend：接入 transformers CLIP（model_name_or_path/device/max_batch_size），use_stub 回退；文本/图像 L2 归一化输出。  
+- RealTeacher：TeacherOutput schema 校验，非法补丁丢弃；TeacherManager 追加 teacher_audit.jsonl 审计。  
+- CodeLLM：支持 output_format=json_diff/files，非法输出不写回。  
+- 工具层：RunCommandTool 白/黑名单、超时、输出截断；WriteFile/ApplyPatch 写入行数/次数限制。  
+- 自我总结与仪表盘：generate_long_term_report + dump_self_report.py；view_experiments_dashboard.py 汇总 JSONL 报告。  
+- 配置自检：check_config_health.py 校验 workspace/AgentConfig，发现缺失字段时报错或告警。
+
 ---
 
 后续改造计划（简要）：

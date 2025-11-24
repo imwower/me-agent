@@ -120,35 +120,58 @@ def _make_agent_spec(agent_config_path: str | None, policy_path: str | None) -> 
     return AgentSpec(id="devloop-agent", config=cfg, policy=policy)
 
 
-def _apply_llm_output(workspace: Workspace, repo_id: str, output: str) -> List[str]:
+def _apply_llm_output(
+    workspace: Workspace,
+    repo_id: str,
+    output: str,
+    output_format: str,
+    write_tool: WriteFileTool,
+) -> List[str]:
     """解析 Code-LLM 输出并写回文件，返回被修改的路径列表。"""
 
+    changed: List[str] = []
     try:
-        data = json.loads(output)
+        if output_format == "files":
+            data = json.loads(output)
+            if isinstance(data, dict) and "file_changes" in data:
+                items = data.get("file_changes") or []
+            elif isinstance(data, dict) and "path" in data and "content" in data:
+                items = [data]
+            elif isinstance(data, list):
+                items = data
+            else:
+                raise ValueError("unsupported files format")
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                path = item.get("path")
+                content = item.get("content", "")
+                if not path:
+                    continue
+                res = write_tool.run({"repo_id": repo_id, "path": path, "content": content})
+                if res.get("ok"):
+                    changed.append(path)
+            return changed
+        if output_format == "json_diff":
+            data = json.loads(output)
+            changes = data.get("changes") if isinstance(data, dict) else data
+            if not isinstance(changes, list):
+                raise ValueError("json_diff changes not list")
+            for item in changes:
+                if not isinstance(item, dict):
+                    continue
+                path = item.get("path")
+                new_content = item.get("new_content")
+                if not path or new_content is None:
+                    continue
+                res = write_tool.run({"repo_id": repo_id, "path": path, "content": str(new_content)})
+                if res.get("ok"):
+                    changed.append(path)
+            return changed
+        if output_format == "raw_diff":
+            raise ValueError("raw_diff not supported in apply step")
     except Exception:
         return []
-
-    if isinstance(data, dict) and "file_changes" in data:
-        items = data.get("file_changes") or []
-    elif isinstance(data, dict) and "path" in data and "content" in data:
-        items = [data]
-    elif isinstance(data, list):
-        items = data
-    else:
-        return []
-
-    write_tool = WriteFileTool(workspace)
-    changed: List[str] = []
-    for item in items:
-        try:
-            path = item.get("path")
-            content = item.get("content", "")
-            if not path:
-                continue
-            write_tool.run({"repo_id": repo_id, "path": path, "content": content})
-            changed.append(path)
-        except Exception:
-            continue
     return changed
 
 
@@ -186,6 +209,11 @@ def run_devloop(
     planner = CodeTaskPlanner()
     prompt_generator = PromptGenerator()
     test_tool = RunTestsTool(workspace)
+    write_tool = WriteFileTool(
+        workspace,
+        max_lines=agent_spec.config.max_write_lines_per_file if agent_spec.config else 500,
+        max_files_per_run=agent_spec.config.max_files_per_run if agent_spec.config else 10,
+    )
     brain_summary: str | None = None
     brain_snapshots: List[BrainSnapshot] = []
 
@@ -305,7 +333,13 @@ def run_devloop(
             contents = _collect_file_contents(workspace, repo_id, paths_to_read)
             prompt = prompt_generator.generate(task, contents, brain_summary=brain_summary)
             llm_output = codellm.complete(prompt)
-            changed_files = _apply_llm_output(workspace, repo_id, llm_output)
+            changed_files = _apply_llm_output(
+                workspace,
+                repo_id,
+                llm_output,
+                codellm_cfg.get("output_format", getattr(codellm, "output_format", "files")),
+                write_tool,
+            )
             test_res = test_tool.run({"repo_id": repo_id, "command": task.test_command})
             task_logs.append(
                 {

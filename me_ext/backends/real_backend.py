@@ -15,8 +15,11 @@ except Exception:  # pragma: no cover - PIL 可能不存在
 
 try:
     import torch  # type: ignore
-except Exception:  # pragma: no cover - torch 可选
+    from transformers import CLIPModel, CLIPProcessor  # type: ignore
+except Exception:  # pragma: no cover - torch/transformers 可选
     torch = None  # type: ignore
+    CLIPModel = None  # type: ignore
+    CLIPProcessor = None  # type: ignore
 
 from me_core.alignment.embeddings import EmbeddingBackend
 from me_core.types import AudioRef, ImageRef
@@ -38,27 +41,64 @@ def _hash_vec(key: str, dim: int) -> List[float]:
 
 class RealEmbeddingBackend(EmbeddingBackend):
     """
-    真实多模态后端占位实现。
+    真实多模态后端。
 
-    - 若可用 torch + PIL，则尝试读取图片并生成基础像素直方图向量；
-    - 文本用 hash 向量；音频暂时复用文本 hash。
-    - 结构上与真实模型一致，便于后续替换为真正的 CLIP/多模态模型。
+    默认尝试加载 transformers CLIP（如 openai/clip-vit-base-patch32），
+    若初始化失败则回退到 hash 占位向量，保证流程可用。
     """
 
     def __init__(self, model_config: Optional[dict] = None) -> None:
         self.model_config = model_config or {}
-        self.dim = int(self.model_config.get("dim", 128))
-        self.device = self.model_config.get("device", "cpu")
-        # 预留真实模型加载位
+        self.dim = int(self.model_config.get("dim", 512))
+        self.device = str(self.model_config.get("device", "cpu"))
+        self.max_batch_size = int(self.model_config.get("max_batch_size", 8))
+        self.model_name = self.model_config.get("model_name_or_path", "openai/clip-vit-base-patch32")
+        self.use_stub = bool(self.model_config.get("use_stub", False))
         self.text_model = None
         self.image_model = None
         self.audio_model = None
+        self.processor = None
+        self._init_model()
+
+    def _init_model(self) -> None:
+        if self.use_stub:
+            logger.info("RealEmbeddingBackend 处于 stub 模式，仅使用 hash 向量。")
+            return
+        if torch is None or CLIPModel is None or CLIPProcessor is None:
+            logger.warning("缺少 torch/transformers，RealEmbeddingBackend 将退回 hash 向量。")
+            return
+        try:
+            device = torch.device(self.device if torch.cuda.is_available() or self.device == "cpu" else "cpu")
+            self.device = str(device)
+            self.model = CLIPModel.from_pretrained(self.model_name).to(device)
+            self.processor = CLIPProcessor.from_pretrained(self.model_name)
+            self.dim = int(self.model.config.projection_dim)
+            logger.info("加载 CLIP 模型成功: %s on %s", self.model_name, self.device)
+        except Exception as exc:  # pragma: no cover - 依赖外部模型
+            logger.warning("加载 CLIP 模型失败，回退到 hash 后端: %s", exc)
+            self.model = None
+            self.processor = None
 
     def embed_text(self, texts: List[str]) -> List[List[float]]:
-        result: List[List[float]] = []
-        for t in texts:
-            result.append(_hash_vec(t or "", self.dim))
-        return result
+        if not texts:
+            return []
+        if getattr(self, "model", None) is None or self.processor is None or torch is None or self.use_stub:
+            return [_hash_vec(t or "", self.dim) for t in texts]
+        vectors: List[List[float]] = []
+        self.model.eval()
+        for i in range(0, len(texts), self.max_batch_size):
+            batch = texts[i : i + self.max_batch_size]
+            inputs = self.processor(text=batch, return_tensors="pt", padding=True, truncation=True)
+            try:
+                inputs = {k: v.to(self.device) for k, v in inputs.items()}
+                with torch.no_grad():
+                    feats = self.model.get_text_features(**inputs)
+                feats = torch.nn.functional.normalize(feats, dim=-1)
+                vectors.extend(feats.detach().cpu().tolist())
+            except Exception as exc:  # pragma: no cover - 依赖外部模型
+                logger.warning("文本编码失败，回退 hash: %s", exc)
+                vectors.extend(_hash_vec(t or "", self.dim) for t in batch)
+        return vectors
 
     def _embed_image_pil(self, img: "Image.Image") -> List[float]:  # type: ignore[valid-type]
         # 将图像缩放到 8x8，作为直方图特征
@@ -73,20 +113,45 @@ class RealEmbeddingBackend(EmbeddingBackend):
         return _normalize(vec[: self.dim])
 
     def embed_image(self, image_refs: List[ImageRef]) -> List[List[float]]:
+        if not image_refs:
+            return []
+        if getattr(self, "model", None) is None or self.processor is None or torch is None or self.use_stub:
+            return [_hash_vec(ref.path, self.dim) for ref in image_refs]
+        if Image is None:
+            logger.warning("PIL 不可用，图片编码回退 hash。")
+            return [_hash_vec(ref.path, self.dim) for ref in image_refs]
         vectors: List[List[float]] = []
+        imgs: List["Image.Image"] = []  # type: ignore[valid-type]
         for ref in image_refs:
-            path = ref.path
-            if Image is None:
-                vectors.append(_hash_vec(path, self.dim))
-                continue
             try:
-                with open(path, "rb") as f:
+                with open(ref.path, "rb") as f:
                     data = f.read()
-                img = Image.open(io.BytesIO(data))
-                vec = self._embed_image_pil(img)
+                img = Image.open(io.BytesIO(data)).convert("RGB")
+                imgs.append(img)
             except Exception:
-                vec = _hash_vec(path, self.dim)
-            vectors.append(vec)
+                imgs.append(None)  # type: ignore[arg-type]
+        for i in range(0, len(imgs), self.max_batch_size):
+            batch_imgs = imgs[i : i + self.max_batch_size]
+            valid_imgs = [im for im in batch_imgs if im is not None]
+            if not valid_imgs:
+                vectors.extend(_hash_vec(image_refs[j].path, self.dim) for j in range(i, i + len(batch_imgs)))
+                continue
+            inputs = self.processor(images=valid_imgs, return_tensors="pt")
+            try:
+                inputs = {k: v.to(self.device) for k, v in inputs.items()}
+                with torch.no_grad():
+                    feats = self.model.get_image_features(**inputs)
+                feats = torch.nn.functional.normalize(feats, dim=-1).detach().cpu().tolist()
+            except Exception as exc:  # pragma: no cover
+                logger.warning("图片编码失败，回退 hash: %s", exc)
+                feats = []
+            # 将编码结果与原顺序对齐，不足部分填 hash
+            feat_iter = iter(feats)
+            for idx, img in enumerate(batch_imgs):
+                if img is None:
+                    vectors.append(_hash_vec(image_refs[i + idx].path, self.dim))
+                else:
+                    vectors.append(next(feat_iter, _hash_vec(image_refs[i + idx].path, self.dim)))
         return vectors
 
     def embed_audio(self, audio_refs: List[AudioRef]) -> List[List[float]]:

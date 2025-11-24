@@ -11,6 +11,10 @@ class AgentConfig:
     use_dummy_embedding: bool = True
     embedding_backend_module: Optional[str] = None
     embedding_backend_kwargs: Dict[str, Any] = field(default_factory=dict)
+    allowed_commands_prefix: list[list[str]] = field(default_factory=list)
+    blocked_commands: list[str] = field(default_factory=lambda: ["rm", "shutdown", "reboot"])
+    max_write_lines_per_file: int = 500
+    max_files_per_run: int = 10
     enable_curiosity: bool = True
     enable_introspection: bool = True
     episode_window: int = 1

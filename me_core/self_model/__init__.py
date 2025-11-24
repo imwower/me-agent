@@ -10,6 +10,7 @@
 from .base import BaseSelfModel, SimpleSelfModel  # noqa: F401
 from .self_state import SelfState  # noqa: F401
 from .self_summarizer import summarize_self  # noqa: F401
+from .self_report import generate_long_term_report  # noqa: F401
 from .self_updater import aggregate_stats, update_from_event  # noqa: F401
 
 __all__ = [
@@ -17,6 +18,7 @@ __all__ = [
     "SimpleSelfModel",
     "SelfState",
     "summarize_self",
+    "generate_long_term_report",
     "update_from_event",
     "aggregate_stats",
 ]

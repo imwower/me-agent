@@ -8,7 +8,13 @@ from typing import List
 from urllib.parse import urlparse
 
 from me_core.teachers.interface import Teacher
-from me_core.teachers.types import ConfigPatch, PolicyPatch, TeacherInput, TeacherOutput
+from me_core.teachers.types import (
+    ConfigPatch,
+    PolicyPatch,
+    TeacherInput,
+    TeacherOutput,
+    validate_teacher_output,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -83,14 +89,20 @@ class RealTeacher(Teacher):
         )
         return prompt
 
-    def _parse_patches_from_response(self, response: str) -> tuple[List[PolicyPatch], List[ConfigPatch]]:
+    def _parse_patches_from_response(self, response: str) -> tuple[List[PolicyPatch], List[ConfigPatch], str, List[str]]:
         patches: List[PolicyPatch] = []
         config_patches: List[ConfigPatch] = []
+        advice_text = ""
+        schema_errors: List[str] = []
         try:
             obj = json.loads(response)
-            patch_items = obj.get("patches") or []
+            advice_text = str(obj.get("advice_text") or obj.get("advice") or "")
+            patch_items = obj.get("patches") or obj.get("policy_patches") or []
             for item in patch_items:
                 if not isinstance(item, dict):
+                    continue
+                if not item.get("path") or "value" not in item:
+                    schema_errors.append("policy_patch missing path/value")
                     continue
                 patches.append(
                     PolicyPatch(
@@ -104,6 +116,9 @@ class RealTeacher(Teacher):
             for item in cfg_items:
                 if not isinstance(item, dict):
                     continue
+                if not item.get("path") or "value" not in item:
+                    schema_errors.append("config_patch missing path/value")
+                    continue
                 config_patches.append(
                     ConfigPatch(
                         repo_id=str(item.get("repo_id") or ""),
@@ -113,9 +128,18 @@ class RealTeacher(Teacher):
                         reason=str(item.get("reason") or ""),
                     )
                 )
-        except Exception:
-            logger.warning("解析 Teacher 响应失败，返回空补丁。")
-        return patches, config_patches
+            ok, schema_errs = validate_teacher_output(
+                {
+                    "advice_text": advice_text or response,
+                    "policy_patches": [p.__dict__ for p in patches],
+                    "config_patches": [c.__dict__ for c in config_patches],
+                }
+            )
+            if not ok:
+                schema_errors.extend(schema_errs)
+        except Exception as exc:
+            schema_errors.append(f"json_parse_error:{exc}")
+        return patches, config_patches, advice_text or response, schema_errors
 
     def generate_advice(self, ti: TeacherInput) -> TeacherOutput:
         prompt = self._build_prompt(ti)
@@ -124,12 +148,17 @@ class RealTeacher(Teacher):
             raw = self._call_http_llm(prompt)
         else:
             raw = self._call_cli_llm(prompt)
-        patches, config_patches = self._parse_patches_from_response(raw)
+        patches, config_patches, advice_text, schema_errors = self._parse_patches_from_response(raw)
+        if schema_errors:
+            logger.warning("Teacher schema 校验失败，忽略部分补丁: %s", ";".join(schema_errors))
+            patches = []
+            config_patches = []
         return TeacherOutput(
-            advice_text=raw,
+            advice_text=advice_text,
             policy_patches=patches,
             config_patches=config_patches,
-            meta={"raw_response": raw, "mode": mode},
+            meta={"raw_response": raw, "mode": mode, "schema_errors": schema_errors},
+            source_teacher_name=self.name,
         )
 
 

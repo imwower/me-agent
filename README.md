@@ -212,6 +212,14 @@ python scripts/demo_cli_agent.py
 - 场景：新增 `brain_guided_decision`，执行前自动触发 brain_infer，回复会带上“根据当前脑状态”的解释。
 - DevLoop：`--brain-mode` 下在跑场景前调用 BrainInferTool，写入 world/self，report 中返回 brain_snapshots。
 
+## R9: Real Backend, 安全沙箱与可观测性
+
+- RealEmbeddingBackend 接入 transformers CLIP，可在 config 中指定 `embedding_backend_module: "me_ext.backends.real_backend"` 与 `embedding_backend_kwargs`（model_name_or_path/device/max_batch_size），自动 CPU 回退。提供 stub 模式便于测试。
+- RealTeacher/Code-LLM：新增 TeacherOutput 轻量 schema 校验、审计日志（logs/teacher_audit.jsonl），CodeLLM 支持 output_format=json_diff/files，非法输出自动跳过。
+- 工具安全：RunCommandTool 支持白/黑名单、超时与输出截断；WriteFile/ApplyPatch 限制单次写入行数/次数。
+- 长期自述与仪表盘：`scripts/dump_self_report.py` 生成长期自我总结；`scripts/view_experiments_dashboard.py` 汇总场景/实验得分。
+- 配置健康检查：`scripts/check_config_health.py` 校验 workspace/AgentConfig 必要字段，缺失时给出 error/warning。
+
 ### 下载 CIFAR-100 数据集（Python 版）
 
 用于 `scripts/train_cifar100_cnn.py` 的示例数据，可直接用仓库脚本下载并解压到 `data/cifar100`：

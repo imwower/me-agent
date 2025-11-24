@@ -22,6 +22,8 @@ class CodeLLMClient:
 
     def __init__(self, config: Dict[str, Any] | None = None) -> None:
         self.config = config or {}
+        self.output_format = self.config.get("output_format", "files")
+        self.max_retries = int(self.config.get("max_retries", 1))
 
     def _call_http(self, prompt: str, max_tokens: int) -> str:
         endpoint = self.config.get("endpoint") or ""
