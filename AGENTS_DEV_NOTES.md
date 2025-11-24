@@ -245,6 +245,14 @@
 - Benchmark：新增 benchmark_scenarios（小型 VQA 占位），run_orchestrator 支持 benchmark/devloop/population 入口。  
 - Orchestrator：统一入口参数控制自动发现/brain-mode/多 Agent/benchmark，输出 JSON 报告。  
 
+## R12: 任务生成与联合进化
+
+- TaskGenerator：基于模板 + Introspection/Benchmark/BrainGraph 生成 GeneratedTask，落盘到 data/generated_tasks。  
+- TaskPool/Curriculum：任务池与课程策略（easy2hard/focus_gaps/random），结合 LogIndex 选择下一批训练/评估任务。  
+- TrainSchedule：将生成任务转 self-snn 训练数据/配置，支撑 brain 侧联合训练。  
+- CoEvoPlanner：组织 AgentPopulation 与 self-snn TrainSchedule，输出 CoEvoState，`run_coevolution.py` 执行多代，dashboard 查看结果。  
+- TODO：更智能的任务生成（LLM/Teacher 参与）、更细粒度的自适应 curriculum 与真实数据集对齐。  
+
 ---
 
 后续改造计划（简要）：

@@ -228,6 +228,14 @@ python scripts/demo_cli_agent.py
 - 基准场景：新增 `benchmark_scenarios`（小型多模态占位），可用于快速跑通 benchmark 模式。
 - 总控脚本：`scripts/run_orchestrator.py` 一键 orchestrate（自动发现/benchmark/devloop/多 Agent/brain）。
 
+## R12: 任务/数据生成与联合进化
+
+- 任务生成：TaskTemplate/GeneratedTask + TaskGenerator，结合 Introspection/Benchmark/BrainGraph 自动生成任务样本，`scripts/generate_tasks.py` 落盘。
+- 任务池与课程表：TaskPool + CurriculumScheduler（easy2hard/focus_gaps/random），从生成任务/基准中挑选下一批。
+- 训练计划：TrainSchedule 将生成任务导出为 self-snn 可消费的数据/配置，供后续训练。
+- 联合进化：CoEvoPlanner/CoEvoState 组织 AgentPopulation 与 self-snn 训练计划，`scripts/run_coevolution.py` 运行多代，`scripts/view_coevo_dashboard.py` 查看分数曲线。
+- 可视化与检索：LogIndex/查询脚本、协作视图、Dashboard 结合，便于长期跟踪自演化进程。
+
 ### 下载 CIFAR-100 数据集（Python 版）
 
 用于 `scripts/train_cifar100_cnn.py` 的示例数据，可直接用仓库脚本下载并解压到 `data/cifar100`：
