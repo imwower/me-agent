@@ -35,6 +35,12 @@ def main() -> None:
         help="同 --gens，兼容旧 CLI 调用",
     )
     parser.add_argument("--output", type=str, default="logs/coevo.jsonl")
+    parser.add_argument(
+        "--max-train-steps",
+        type=int,
+        default=None,
+        help="为生成的 self-snn 训练计划指定最大步数（可选）",
+    )
     args = parser.parse_args()
 
     pop = AgentPopulation()
@@ -48,7 +54,7 @@ def main() -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     for gen in range(args.gens):
         results = {"agent_scores": {"agent1": 0.5 + 0.1 * gen}}
-        state = planner.propose_next_round(state, results)
+        state = planner.propose_next_round(state, results, max_train_steps=args.max_train_steps)
         out_path.write_text("", encoding="utf-8") if not out_path.exists() else None
         with out_path.open("a", encoding="utf-8") as f:
             f.write(

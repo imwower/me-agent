@@ -29,6 +29,7 @@ class CoEvoPlanner:
         prev_state: Optional[CoEvoState],
         prev_results: Dict[str, Any],
         max_tasks: int = 5,
+        max_train_steps: int | None = None,
     ) -> CoEvoState:
         gen = 0 if prev_state is None else prev_state.generation + 1
         specs = self.population.get_specs()
@@ -48,6 +49,7 @@ class CoEvoPlanner:
             config_path="configs/agency.yaml",
             output_dir=f"runs/coevo/gen{gen}",
             max_epochs=1,
+            max_steps=max_train_steps,
         )
         history = []
         if prev_state:

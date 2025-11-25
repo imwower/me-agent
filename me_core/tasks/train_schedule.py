@@ -17,6 +17,7 @@ class TrainSchedule:
     output_dir: str
     max_epochs: int
     priority: int = 0
+    max_steps: int | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -26,6 +27,7 @@ class TrainSchedule:
             "output_dir": self.output_dir,
             "max_epochs": self.max_epochs,
             "priority": self.priority,
+            "max_steps": self.max_steps,
             "tasks": [task_to_dict(t) for t in self.tasks],
         }
 
