@@ -1,0 +1,1 @@
+{"id": "task001", "kind": "structured_multimodal", "description": "基于设备近 10 分钟指标和最近截图，判断是否需要报警。", "question": "根据以下指标和截图，需要报警吗？请简要说明。", "structured_input": {"cpu": 0.82, "mem": 0.91, "req_rate": 320, "error_rate": 0.07}, "image_path": "tests/data/dummy.png", "expected_keywords": ["报警", "紧张"]}

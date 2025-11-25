@@ -243,6 +243,30 @@ python scripts/demo_cli_agent.py
 - Notebook/Comparison/PaperDraft：生成时会带上建议图表 ID，脚本可在 Markdown 中嵌入已有图像。
 - HTTP Dashboard：`me_ext/http_api/static/` 简易前端，HTTP API 增加 `/notebook/recent` `/report/comparison` `/report/paper_draft` `/plots/*`，可查看状态、实验、Notebook 摘要与图表。
 
+## R15: Policy Learning & Causal World Model & Deep SNN Curriculum
+
+- 策略学习：`PolicyLearner` 基于 reward 微调 `AgentPolicy`（好奇/工具偏好等），`SimpleLearner` 会自动应用小幅调参。
+- 因果世界模型：`SimpleWorldModel.transition_stats` 记录「场景→行动」成功率与 reward，`predict_success_prob` 提供简单预测。
+- 对话 LLM 输出头：`RuleBasedDialoguePolicy` 可在 `AgentConfig.use_llm_dialogue` 为真时走 LLM 路径（经 `RealDialogueLLM`），失败回退规则。
+- 训练计划：`TrainSchedule` 导出含 GeneratedTask 的 JSON；self-snn 新增 `scripts/train_from_schedule.py --dry-run` 直接消费计划。
+- 闭环脚本：`scripts/run_small_full_loop.py` 贯穿“基准→任务生成→self-snn 训练计划→策略调参”，默认使用 self-snn `train_from_schedule.py` 的 dry-run。
+  ```bash
+  python scripts/run_small_full_loop.py \
+    --workspace configs/workspace.example.json \
+    --agent-config configs/agent.small.json \
+    --snn-config ../self-snn/configs/s0_minimal.yaml \
+    --use-llm-dialogue
+  ```
+  终端会输出本轮策略调参、训练计划路径与基准前后对比的小结。
+
+## R16: Full Multimodal & Real-Task Integration
+
+- 多模态感知：新增 `AudioPerception`/`VideoPerception`/`StructuredPerception` 与 `default_perceive` 扩展，`MultiModalInput` 支持 structured/audio/video 元数据。
+- Embedding 后端：`RealEmbeddingBackend` 提供 audio/video 占位向量接口，保持统一概念空间入口。
+- 真实任务集：`data/real_tasks/tasks.jsonl` 示例 + `build_real_task_scenarios` 装载，可在 benchmark/CoEvo 中评估结构化+图片任务。
+- HTTP API：新增 `/task/run` 和 `/train/run`，Dashboard 增加按钮，可外部触发任务或 self-snn 训练（默认 dry-run）。
+- self-snn 对接：`scripts/train_from_schedule.py` 支持从 TrainSchedule 转换数据集并运行小训练，`self_snn/data/task_adapter.py` 提供 GeneratedTask→spike 占位转换。
+
 ## 快速启动（接 self-snn 示例）
 
 1) 配置 workspace：`configs/workspace.example.json` 已填好 self-snn 路径 `/Users/george/code/github/self-snn`，允许访问 configs/scripts/self_snn/tests/runs，默认训练/评估/brain 脚本都指向 self-snn。

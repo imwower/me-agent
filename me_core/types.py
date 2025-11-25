@@ -93,12 +93,14 @@ class MultiModalInput:
     image_meta: Optional[JsonDict] = None
     audio_meta: Optional[JsonDict] = None
     video_meta: Optional[JsonDict] = None
+    structured_data: Optional[JsonDict] = None
 
 
 # 轻量级多模态引用结构 ----------------------------------------------------------------
 
 ImageId = NewType("ImageId", str)
 AudioId = NewType("AudioId", str)
+VideoId = NewType("VideoId", str)
 
 
 @dataclass(slots=True)
@@ -127,6 +129,16 @@ class AudioRef:
     path: str
     duration: Optional[float] = None
     sample_rate: Optional[int] = None
+    meta: JsonDict = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class VideoRef:
+    """视频引用的统一结构。"""
+
+    path: str
+    duration: Optional[float] = None
+    fps: Optional[float] = None
     meta: JsonDict = field(default_factory=dict)
 
 

@@ -57,6 +57,7 @@ from me_core.workspace import RepoSpec, Workspace
 from me_core.world_model import SimpleWorldModel
 from me_core.brain import BrainSnapshot
 from me_ext.codellm import CodeLLMClient
+from me_ext.dialogue import RealDialogueLLM
 
 
 def _load_json(path: str | None) -> Dict[str, Any]:
@@ -83,7 +84,17 @@ def build_agent(spec: AgentSpec) -> SimpleAgent:
         "self_describe": SelfDescribeTool(self_model=self_model, world_model=world_model),
     }
     learner = SimpleLearner()
-    dialogue_policy = RuleBasedDialoguePolicy(policy_config=spec.policy)
+    dialogue_llm = None
+    if getattr(cfg, "use_llm_dialogue", False):
+        try:
+            dialogue_llm = RealDialogueLLM(getattr(cfg, "dialogue_llm", {}))
+        except Exception:
+            dialogue_llm = None
+    dialogue_policy = RuleBasedDialoguePolicy(
+        policy_config=spec.policy,
+        agent_config=cfg,
+        dialogue_llm=dialogue_llm,
+    )
     event_stream = EventStream()
 
     agent = SimpleAgent(

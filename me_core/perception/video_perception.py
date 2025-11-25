@@ -4,12 +4,12 @@ from pathlib import Path
 from typing import Any, List
 
 from .base import BasePerception
-from ..types import AgentEvent, AudioRef, EventKind
+from ..types import AgentEvent, EventKind, VideoRef
 
 
-class AudioPerception(BasePerception):
+class VideoPerception(BasePerception):
     """
-    音频感知桩：R0 仅包装路径为 AudioRef，不做真实解析。
+    视频感知桩：仅记录路径与基础元数据，不做帧解析。
     """
 
     def __init__(self, default_source: str = "environment") -> None:
@@ -18,23 +18,24 @@ class AudioPerception(BasePerception):
     def perceive(self, raw_input: Any, **kwargs) -> List[AgentEvent]:
         source = kwargs.get("source") or self.default_source
 
-        if isinstance(raw_input, AudioRef):
-            audio_ref = raw_input
+        if isinstance(raw_input, VideoRef):
+            video_ref = raw_input
         elif isinstance(raw_input, str):
-            audio_ref = AudioRef(path=str(Path(raw_input)))
+            video_ref = VideoRef(path=str(Path(raw_input)))
         elif isinstance(raw_input, dict):
             path = raw_input.get("path") or ""
             meta = raw_input.get("meta") or {}
-            audio_ref = AudioRef(path=str(path), meta=meta)
+            video_ref = VideoRef(path=str(path), meta=meta)
         else:
-            raise TypeError("AudioPerception 目前仅支持 str 或 AudioRef 类型输入。")
+            raise TypeError("VideoPerception 目前仅支持 str/VideoRef/dict 输入。")
 
-        path_obj = Path(audio_ref.path)
+        path_obj = Path(video_ref.path)
         exists = path_obj.exists()
         payload = {
-            "audio_ref": audio_ref,
-            "path": audio_ref.path,
+            "video_path": video_ref.path,
+            "video_ref": video_ref,
             "exists": exists,
+            "meta": dict(video_ref.meta),
         }
         if not exists:
             payload["error"] = "file_not_found"
@@ -45,8 +46,8 @@ class AudioPerception(BasePerception):
             source=source,
             kind=EventKind.PERCEPTION,
         )
-        event.modality = "audio"
-        event.tags.update({"audio"})
+        event.modality = "video"
+        event.tags.update({"video"})
         if not exists:
             event.tags.add("missing")
         return [event]

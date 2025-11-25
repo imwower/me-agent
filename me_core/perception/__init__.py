@@ -12,8 +12,9 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Any, Dict, List
+import json
 
-from me_core.types import AudioRef, ImageRef, MultiModalInput, AgentEvent
+from me_core.types import AudioRef, ImageRef, MultiModalInput, AgentEvent, VideoRef
 
 from .audio_perception import AudioPerception  # noqa: F401
 from .audio_encoder_stub import AudioEncoderStub  # noqa: F401
@@ -21,10 +22,12 @@ from .base import BasePerception  # noqa: F401
 from .image_encoder_stub import ImageEncoderStub  # noqa: F401
 from .image_perception import ImagePerception  # noqa: F401
 from .multimodal_perception import MultiModalPerception  # noqa: F401
+from .structured_perception import StructuredPerception  # noqa: F401
 from .processor import encode_to_event  # noqa: F401
 from .text_encoder_stub import TextEncoderStub  # noqa: F401
 from .text_perception import TextPerception  # noqa: F401
 from .video_encoder_stub import VideoEncoderStub  # noqa: F401
+from .video_perception import VideoPerception  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +41,8 @@ __all__ = [
     "ImageEncoderStub",
     "AudioEncoderStub",
     "VideoEncoderStub",
+    "StructuredPerception",
+    "VideoPerception",
     "encode_multimodal",
     "encode_to_event",
     "default_perceive",
@@ -72,6 +77,14 @@ def encode_multimodal(input_data: MultiModalInput) -> Dict[str, List[float]]:
         encoder = VideoEncoderStub()
         results["video"] = encoder.encode(input_data.video_meta)
 
+    if input_data.structured_data is not None:
+        encoder = TextEncoderStub()
+        try:
+            encoded = encoder.encode(json.dumps(input_data.structured_data, sort_keys=True))
+        except Exception:
+            encoded = encoder.encode(str(input_data.structured_data))
+        results["structured"] = encoded
+
     logger.info("多模态编码结果: %s", results)
     return results
 
@@ -90,6 +103,16 @@ def default_perceive(raw_input: Any) -> List[AgentEvent]:
 
     if isinstance(raw_input, (str, list)):
         # 如果是字符串路径，demo 可自行传给 ImagePerception，这里默认视为文本
+        try:
+            suffix = Path(str(raw_input)).suffix.lower()
+            if suffix in {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}:
+                return ImagePerception().perceive(str(raw_input))
+            if suffix in {".wav", ".mp3", ".flac", ".aac"}:
+                return AudioPerception().perceive(str(raw_input))
+            if suffix in {".mp4", ".mov", ".avi", ".mkv"}:
+                return VideoPerception().perceive(str(raw_input))
+        except Exception:
+            pass
         return TextPerception().perceive(raw_input)
 
     if isinstance(raw_input, ImageRef):
@@ -98,10 +121,27 @@ def default_perceive(raw_input: Any) -> List[AgentEvent]:
     if isinstance(raw_input, AudioRef):
         return AudioPerception().perceive(raw_input)
 
+    if isinstance(raw_input, VideoRef):
+        return VideoPerception().perceive(raw_input)
+
+    if isinstance(raw_input, dict):
+        # 偏向结构化感知
+        return StructuredPerception().perceive(raw_input)
+
     if isinstance(raw_input, str):
+        try:
+            obj = json.loads(raw_input)
+            if isinstance(obj, dict):
+                return StructuredPerception().perceive(obj)
+        except Exception:
+            pass
         suffix = Path(raw_input).suffix.lower()
         if suffix in {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}:
             return ImagePerception().perceive(raw_input)
+        if suffix in {".wav", ".mp3", ".flac", ".aac"}:
+            return AudioPerception().perceive(raw_input)
+        if suffix in {".mp4", ".mov", ".avi", ".mkv"}:
+            return VideoPerception().perceive(raw_input)
         return TextPerception().perceive(raw_input)
 
     return []

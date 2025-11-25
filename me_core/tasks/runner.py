@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Dict, List, Sequence
 
 from me_core.agent import SimpleAgent
+from me_core.types import MultiModalInput
 
 from .types import Scenario, TaskResult, TaskStep
 
@@ -36,7 +37,24 @@ def run_scenario(agent: SimpleAgent, scenario: Scenario) -> TaskResult:
     case_insensitive = bool(scenario.eval_config.get("case_insensitive", True))
 
     for step in scenario.steps:
-        reply = agent.step(step.user_input, image_path=step.image_path)
+        if step.structured_input or step.audio_path or step.video_path:
+            image_meta = {"path": step.image_path} if step.image_path else None
+            audio_meta = {"path": step.audio_path} if step.audio_path else None
+            video_meta = {"path": step.video_path} if step.video_path else None
+            mm = MultiModalInput(
+                text=step.user_input,
+                image_meta=image_meta,
+                audio_meta=audio_meta,
+                video_meta=video_meta,
+                structured_data=step.structured_input,
+            )
+            try:
+                reply = agent.step(mm)
+            except Exception:
+                text_fallback = step.user_input + " " + str(step.structured_input or "")
+                reply = agent.step(text_fallback, image_path=step.image_path)
+        else:
+            reply = agent.step(step.user_input, image_path=step.image_path)
         mode = step.eval_config.get("mode", "contains_any") if step.eval_config else "contains_any"
         score = _step_success(reply or "", step.expected_keywords or [], mode=mode, case_insensitive=case_insensitive)
         weight = step.weight

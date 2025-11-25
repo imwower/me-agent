@@ -2,7 +2,8 @@
 
 当前提供：
 - LearningManager：根据不确定性与驱动力，决定何时主动调用工具进行学习；
-- BaseLearner / SimpleLearner：面向 Agent 的学习接口与简易实现。
+- BaseLearner / SimpleLearner：面向 Agent 的学习接口与简易实现；
+- PolicyLearner：基于 reward 的轻量策略调优器。
 """
 
 from .base import (  # noqa: F401
@@ -12,6 +13,7 @@ from .base import (  # noqa: F401
     ToolUsageStats,
 )
 from .learning_manager import LearningManager  # noqa: F401
+from .policy_learner import PolicyLearner, PolicyStats  # noqa: F401
 
 __all__ = [
     "BaseLearner",
@@ -19,4 +21,6 @@ __all__ = [
     "IntentOutcomeStats",
     "SimpleLearner",
     "LearningManager",
+    "PolicyLearner",
+    "PolicyStats",
 ]

@@ -8,6 +8,9 @@ from typing import Any, Dict, List, Optional
 class TaskStep:
     user_input: str
     image_path: Optional[str] = None
+    audio_path: Optional[str] = None
+    video_path: Optional[str] = None
+    structured_input: Optional[Dict[str, Any]] = None
     expected_keywords: Optional[List[str]] = None
     weight: float = 1.0
     eval_config: Dict[str, Any] = field(default_factory=dict)

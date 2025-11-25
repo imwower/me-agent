@@ -21,6 +21,8 @@ class AgentConfig:
     timeline_path: Optional[str] = None
     episodes_path: Optional[str] = None
     concepts_path: Optional[str] = None
+    use_llm_dialogue: bool = False
+    dialogue_llm: Dict[str, Any] = field(default_factory=dict)
 
 
 def load_agent_config(path: Optional[str]) -> AgentConfig:

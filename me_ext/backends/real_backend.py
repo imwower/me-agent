@@ -22,7 +22,7 @@ except Exception:  # pragma: no cover - torch/transformers 可选
     CLIPProcessor = None  # type: ignore
 
 from me_core.alignment.embeddings import EmbeddingBackend
-from me_core.types import AudioRef, ImageRef
+from me_core.types import AudioRef, ImageRef, VideoRef
 
 logger = logging.getLogger(__name__)
 
@@ -157,6 +157,10 @@ class RealEmbeddingBackend(EmbeddingBackend):
     def embed_audio(self, audio_refs: List[AudioRef]) -> List[List[float]]:
         # 预留音频处理接口，当前复用 hash 占位
         return [_hash_vec(ref.path, self.dim) for ref in audio_refs]
+
+    def embed_video(self, video_refs: List[VideoRef]) -> List[List[float]]:
+        # 视频暂用路径 hash 占位，未来可替换为关键帧/音频联合编码
+        return [_hash_vec(ref.path, self.dim) for ref in video_refs]
 
 
 def create_backend(config_dict: dict) -> EmbeddingBackend:

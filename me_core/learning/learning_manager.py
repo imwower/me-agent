@@ -9,6 +9,7 @@ from me_core.tools.executor_stub import ToolExecutorStub, ToolResult
 from me_core.tools.registry import ToolInfo, ToolRegistry
 
 from .config import DEFAULT_LEARNING_CONFIG
+from .policy_learner import PolicyLearner
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ class LearningManager:
     knowledge_base: List[Dict[str, Any]] = field(default_factory=list)
     executor: ToolExecutorStub = field(default_factory=ToolExecutorStub)
     max_knowledge_entries: int = DEFAULT_LEARNING_CONFIG.max_knowledge_entries
+    policy_learner: PolicyLearner = field(default_factory=PolicyLearner)
 
     def compute_learning_desire(
         self,
@@ -144,6 +146,21 @@ class LearningManager:
             max_results,
         )
         return list(reversed(matched))
+
+    # 策略学习相关辅助 ---------------------------------------------------------
+
+    def observe_task_result(self, param_key: str, reward: float, success: bool) -> None:
+        """记录一次任务或实验的 reward，用于后续策略调参。"""
+
+        self.policy_learner.record_outcome(param_key, reward, success)
+
+    def apply_policy_updates(self, policy: Any) -> Dict[str, Any]:
+        """根据已有统计给出更新建议并应用。"""
+
+        updates = self.policy_learner.propose_updates(policy)
+        if updates:
+            self.policy_learner.apply_updates(policy, updates)
+        return updates
 
     def select_tools_for_topic(self, topic: str) -> List[ToolInfo]:
         """根据主题选择本轮要使用的工具列表。

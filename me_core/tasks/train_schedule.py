@@ -18,6 +18,17 @@ class TrainSchedule:
     max_epochs: int
     priority: int = 0
 
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "repo_id": self.repo_id,
+            "config_path": self.config_path,
+            "output_dir": self.output_dir,
+            "max_epochs": self.max_epochs,
+            "priority": self.priority,
+            "tasks": [task_to_dict(t) for t in self.tasks],
+        }
+
 
 def export_tasks_for_snn(tasks: List[GeneratedTask], output_dir: str) -> str:
     """
@@ -44,3 +55,23 @@ def export_tasks_for_snn(tasks: List[GeneratedTask], output_dir: str) -> str:
                 + "\n"
             )
     return str(out_path)
+
+
+def task_to_dict(task: GeneratedTask) -> dict:
+    return {
+        "id": task.id,
+        "template_id": task.template_id,
+        "payload": task.payload,
+        "expected_behavior": task.expected_behavior,
+        "labels": task.labels,
+        "meta": task.meta,
+        "difficulty": task.difficulty,
+        "kind": task.kind,
+    }
+
+
+def dump_train_schedule(schedule: TrainSchedule, path: str) -> str:
+    data = schedule.to_dict()
+    with Path(path).open("w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return path

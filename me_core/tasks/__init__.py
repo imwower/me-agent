@@ -7,6 +7,8 @@ from .experiment_runner import run_experiment_scenario, evaluate_experiment_resu
 from .benchmark_scenarios import list_benchmark_scenarios  # noqa: F401
 from .bench_multimodal import load_multimodal_benchmark  # noqa: F401
 from .bench_codefix import load_codefix_tasks  # noqa: F401
+from .train_schedule import TrainSchedule, export_tasks_for_snn, dump_train_schedule, task_to_dict  # noqa: F401
+from .real_tasks import build_real_task_scenarios, load_real_task_records  # noqa: F401
 
 __all__ = [
     "TaskStep",
@@ -25,4 +27,10 @@ __all__ = [
     "list_benchmark_scenarios",
     "load_multimodal_benchmark",
     "load_codefix_tasks",
+    "TrainSchedule",
+    "export_tasks_for_snn",
+    "dump_train_schedule",
+    "task_to_dict",
+    "build_real_task_scenarios",
+    "load_real_task_records",
 ]

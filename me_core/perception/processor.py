@@ -9,6 +9,7 @@ from .audio_encoder_stub import AudioEncoderStub
 from .image_encoder_stub import ImageEncoderStub
 from .text_encoder_stub import TextEncoderStub
 from .video_encoder_stub import VideoEncoderStub
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,14 @@ def _encode_multimodal_local(input_data: MultiModalInput) -> Dict[str, List[floa
     if input_data.video_meta is not None:
         encoder = VideoEncoderStub()
         results["video"] = encoder.encode(input_data.video_meta)
+
+    if input_data.structured_data is not None:
+        encoder = TextEncoderStub()
+        try:
+            encoded = encoder.encode(json.dumps(input_data.structured_data, sort_keys=True))
+        except Exception:
+            encoded = encoder.encode(str(input_data.structured_data))
+        results["structured"] = encoded
 
     return results
 
@@ -65,13 +74,14 @@ def encode_to_event(
         "source": source,
         "modalities": list(embeddings.keys()),
         "embeddings": embeddings,
-        "raw": {
-            "text": input_data.text,
-            "image_meta": input_data.image_meta,
-            "audio_meta": input_data.audio_meta,
-            "video_meta": input_data.video_meta,
-        },
-    }
+            "raw": {
+                "text": input_data.text,
+                "image_meta": input_data.image_meta,
+                "audio_meta": input_data.audio_meta,
+                "video_meta": input_data.video_meta,
+                "structured_data": input_data.structured_data,
+            },
+        }
 
     logger.info(
         "将多模态输入封装为感知事件: source=%s, modalities=%s",

@@ -44,6 +44,13 @@ class TimedEvent:
 
 
 @dataclass
+class EventTransitionStats:
+    count: int = 0
+    success_count: int = 0
+    total_reward: float = 0.0
+
+
+@dataclass
 class SimpleWorldModel(BaseWorldModel):
     """基于事件历史的简易世界模型。
 
@@ -56,6 +63,7 @@ class SimpleWorldModel(BaseWorldModel):
 
     history: EventHistory = field(default_factory=lambda: EventHistory(max_events=200))
     tool_stats: Dict[str, Dict[str, int]] = field(default_factory=dict)
+    transition_stats: Dict[tuple[str, str], EventTransitionStats] = field(default_factory=dict)
     concept_space: ConceptSpace = field(default_factory=ConceptSpace)
     concept_stats: Dict[ConceptId, ConceptStats] = field(default_factory=dict)
     timeline_limit: int = 500
@@ -63,6 +71,8 @@ class SimpleWorldModel(BaseWorldModel):
     _current_step: int = field(default=0, init=False, repr=False)
     last_brain_snapshot: Optional[BrainSnapshot] = field(default=None, init=False, repr=False)
     brain_snapshot_history: List[BrainSnapshot] = field(default_factory=list, init=False, repr=False)
+    _last_context_key: Optional[str] = field(default=None, init=False, repr=False)
+    _last_action_key: Optional[tuple[str, str]] = field(default=None, init=False, repr=False)
 
     def update(self, events: List[AgentEvent]) -> None:
         """将新事件写入历史，并更新工具统计。"""
@@ -159,13 +169,24 @@ class SimpleWorldModel(BaseWorldModel):
 
         self.history.add(event)
 
+        context_key = self._extract_context_key(event)
+        action_key = self._extract_action_key(event)
+        payload = event.payload if isinstance(event.payload, dict) else {}
+
+        if self._last_context_key and action_key:
+            transition_key = (self._last_context_key, action_key)
+            stats = self.transition_stats.setdefault(transition_key, EventTransitionStats())
+            stats.count += 1
+            self._last_action_key = transition_key
+        else:
+            self._last_action_key = None
+
         kind = (
             event.kind.value
             if isinstance(event.kind, EventKind)
             else (event.kind or event.event_type)
         )
         if kind == EventKind.TOOL_RESULT.value:
-            payload = event.payload or {}
             tool_name = str(payload.get("tool_name") or "unknown_tool")
             success = bool(payload.get("success"))
             stats = self.tool_stats.setdefault(tool_name, {"success": 0, "failure": 0})
@@ -173,6 +194,19 @@ class SimpleWorldModel(BaseWorldModel):
                 stats["success"] += 1
             else:
                 stats["failure"] += 1
+            if action_key is None:
+                action_key = tool_name
+
+        if context_key and action_key:
+            transition_key = (context_key, action_key)
+            stats = self.transition_stats.setdefault(transition_key, EventTransitionStats())
+            if stats.count == 0 and self._last_action_key != transition_key:
+                stats.count = 1
+            if payload and isinstance(payload.get("success"), bool) and payload.get("success"):
+                stats.success_count += 1
+            reward = self._extract_reward(event)
+            if reward is not None:
+                stats.total_reward += float(reward)
 
         concept_node = concept
         if concept_node is None and isinstance(event.meta, dict):
@@ -189,6 +223,8 @@ class SimpleWorldModel(BaseWorldModel):
             modality = event.modality or "unknown"
             stats.modalities[modality] = int(stats.modalities.get(modality, 0)) + 1
             stats.last_seen_step = self._current_step
+
+        self._last_context_key = context_key
 
     def get_concept_stats(self, concept: ConceptNode) -> ConceptStats | None:
         return self.concept_stats.get(concept.id)
@@ -288,3 +324,50 @@ class SimpleWorldModel(BaseWorldModel):
         if max_history > 0 and len(self.brain_snapshot_history) > max_history:
             overflow = len(self.brain_snapshot_history) - max_history
             del self.brain_snapshot_history[0:overflow]
+
+    # 因果/预测相关的轻量接口 -----------------------------------------------------
+
+    def _extract_context_key(self, event: AgentEvent) -> str:
+        meta = event.meta if isinstance(event.meta, dict) else {}
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        for key in ("scenario_id", "scene_id", "context_id"):
+            if key in meta:
+                return str(meta[key])
+            if key in payload:
+                return str(payload[key])
+        return str(event.event_type or event.kind or "unknown")
+
+    def _extract_action_key(self, event: AgentEvent) -> str | None:
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        tool = payload.get("tool_name")
+        if tool:
+            return str(tool)
+        if event.event_type == EventKind.DIALOGUE.value:
+            return "dialogue"
+        if event.event_type == EventKind.TASK.value:
+            return str(payload.get("task_type") or "task")
+        return None
+
+    def _extract_reward(self, event: AgentEvent) -> float | None:
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        meta = event.meta if isinstance(event.meta, dict) else {}
+        for key in ("reward", "score"):
+            val = payload.get(key, meta.get(key)) if isinstance(payload, dict) else meta.get(key)
+            if isinstance(val, (int, float)):
+                return float(val)
+        success = payload.get("success") if isinstance(payload, dict) else None
+        if isinstance(success, bool):
+            return 1.0 if success else -0.3
+        return None
+
+    def predict_success_prob(self, scenario_id: str, action_key: str) -> float:
+        """
+        使用 transition_stats 中 (scenario_id, action_key) 的历史统计，
+        返回简单成功概率估计（成功次数 / 总次数），若数据不足则返回默认值。
+        """
+
+        key = (str(scenario_id), str(action_key))
+        stats = self.transition_stats.get(key)
+        if not stats or stats.count <= 0:
+            return 0.5
+        return stats.success_count / max(1, stats.count)

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
+import logging
 from abc import ABC, abstractmethod
-from typing import List, TYPE_CHECKING
+from typing import List, TYPE_CHECKING, Any, Optional
 
 from me_core.types import AgentEvent
 
@@ -11,6 +13,8 @@ from ..self_model.base import BaseSelfModel
 if TYPE_CHECKING:
     from me_core.learning import SimpleLearner
     from me_core.world_model import SimpleWorldModel
+
+logger = logging.getLogger(__name__)
 
 
 class BaseDialoguePolicy(ABC):
@@ -45,8 +49,57 @@ class RuleBasedDialoguePolicy(BaseDialoguePolicy):
         - 「我做」：结合自我模型给出的实际回复内容。
     """
 
-    def __init__(self, policy_config: any = None) -> None:
+    def __init__(
+        self,
+        policy_config: Any = None,
+        agent_config: Any | None = None,
+        dialogue_llm: Any | None = None,
+    ) -> None:
         self.policy_config = policy_config
+        self.agent_config = agent_config
+        self.dialogue_llm = dialogue_llm
+        self.use_llm_dialogue = bool(getattr(agent_config, "use_llm_dialogue", False))
+        self.max_llm_reply_length = 400
+
+    def _build_llm_prompt(
+        self,
+        events: List[AgentEvent],
+        intent: Intent,
+        world: "SimpleWorldModel",
+        self_model: BaseSelfModel,
+    ) -> str:
+        recent_texts: List[str] = []
+        for e in reversed(events[-5:]):
+            payload = e.payload or {}
+            raw = payload.get("raw") if isinstance(payload, dict) else None
+            if isinstance(raw, dict) and isinstance(raw.get("text"), str):
+                recent_texts.append(raw["text"])
+        self_desc = self_model.describe_self(world_model=world, max_concepts=3)
+        world_summary = world.summarize()
+        world_str = json.dumps(world_summary, ensure_ascii=False)
+        if len(world_str) > 500:
+            world_str = world_str[:500] + "..."
+        intent_desc = intent.explanation or intent.message or intent.kind
+        prompt = (
+            "你是一个受限的对话助手，需要根据给定的内部状态生成中文回复。"
+            "请保持简洁，并避免编造无关细节。\n"
+            f"【意图】{intent.kind}: {intent_desc}\n"
+            f"【自我】{self_desc}\n"
+            f"【世界】{world_str}\n"
+            f"【最近输入】{'; '.join(reversed(recent_texts)) if recent_texts else '无'}\n"
+            "请输出一句中文回复。"
+        )
+        return prompt
+
+    def _safe_reply_text(self, text: Optional[str]) -> Optional[str]:
+        if not text:
+            return None
+        reply = str(text).strip()
+        if not reply:
+            return None
+        if len(reply) > self.max_llm_reply_length:
+            reply = reply[: self.max_llm_reply_length] + "..."
+        return reply
 
     def generate_reply(
         self,
@@ -100,6 +153,17 @@ class RuleBasedDialoguePolicy(BaseDialoguePolicy):
                 f"{t.step}:{t.event.event_type}" for t in recent
             ) if recent else "最近事件：暂无"
             return f"我想回顾一下外部信息。{events_line}。" + (" ".join(concept_lines) if concept_lines else "")
+
+        if self.use_llm_dialogue and self.dialogue_llm:
+            prompt = self._build_llm_prompt(events, intent, world, self_model)
+            try:
+                llm_reply = self.dialogue_llm.generate_reply(prompt, meta={"intent": intent.kind})
+            except Exception as exc:  # pragma: no cover - 外部调用
+                logger.warning("LLM 对话失败，回退到规则模板: %s", exc)
+                llm_reply = None
+            safe_reply = self._safe_reply_text(llm_reply)
+            if safe_reply:
+                return safe_reply
 
         if intent.kind == "curiosity":
             target = intent.extra.get("concept_name") if intent.extra else None

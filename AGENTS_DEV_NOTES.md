@@ -198,6 +198,22 @@
 - DevLoop：`scripts/run_devloop.py` 串联 Scenario → 内省 → Teacher → Code-LLM → 写回 → 跑单测的自改流水线。  
 - TODO：引入代码任务优先级到种群演化，支持跨仓库协同，把 DevLoop 结果反馈到外部训练/强化学习流程。
 
+## R15: 策略学习 / 因果世界模型 / 自演化课程表
+
+- PolicyLearner：记录 param_key → reward/success 简单统计，当前调整幅度为 ±10% 级别的小步长，仍是启发式（未来可替换 RL/贝叶斯优化）。SimpleLearner 会在 curiosity 意图成功/失败时写入奖励。
+- SimpleWorldModel 追加 transition_stats（场景/事件 → 行动），`predict_success_prob` 直接用成功率估计，仍属规则级预测，没有真正的因果推断或嵌入。
+- Dialogue LLM 输出头：RuleBasedDialoguePolicy 在 `AgentConfig.use_llm_dialogue` 打开时走 RealDialogueLLM（http/cli/stub），失败自动回退规则模板；安全控制仅做长度截断与空串过滤，后续需加入更细的审核。
+- TrainSchedule 导出：新增 `dump_train_schedule`，结构与 self-snn `scripts/train_from_schedule.py` 对齐；当前适配层仅把 GeneratedTask 转成 JSONL，不做复杂 dataset 转换。
+- 闭环脚本：`scripts/run_small_full_loop.py` 串起 benchmark→任务生成→TrainSchedule→self-snn dry-run→PolicyLearner 调参→摘要输出，默认运行轻量路径，未来可换为真实实验/大模型教师。
+
+## R16: 多模态补全 / 真实任务 / HTTP 外部触发
+
+- 感知：Audio/Video/Structured Perception 补齐，`MultiModalInput` 支持 structured_data；default_perceive 可按扩展名或 JSON 自动路由。
+- Embedding 后端：RealEmbeddingBackend 增 audio/video stub 向量，统一接口留待真实模型落地。
+- 真实任务：`data/real_tasks/tasks.jsonl` + `build_real_task_scenarios` 将结构化+图片样本纳入 Scenario 评估；TaskStep 支持 structured/audio/video 字段。
+- HTTP API：`/task/run` 接受多模态输入并调用默认 SimpleAgent；`/train/run` 可触发 self-snn schedule dry-run，Dashboard 增按钮展示结果（仍属演示级）。
+- self-snn 适配：`self_snn/data/task_adapter.py` 将 GeneratedTask 转成占位 spike 数据，`train_from_schedule.py` 支持 real run（可配置 max_epochs/duration）。
+
 ## R6: Experiment Orchestrator
 
 - Workspace RepoSpec 支持 tags/meta，标记 experiment_target 仓库并附带默认 train/eval 命令。  

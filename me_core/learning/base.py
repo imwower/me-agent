@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, TYPE_CHECKING
 
 from me_core.types import AgentEvent
+from .policy_learner import PolicyLearner
 
 if TYPE_CHECKING:  # 仅供类型检查使用，避免运行时循环依赖
     from me_core.drives.base import BaseDriveSystem
@@ -62,6 +63,7 @@ class SimpleLearner(BaseLearner):
     concept_counts: Dict[str, int] = None  # type: ignore[assignment]
     tool_stats: Dict[str, ToolUsageStats] = field(default_factory=dict)
     intent_stats: Dict[str, IntentOutcomeStats] = field(default_factory=dict)
+    policy_learner: PolicyLearner = field(default_factory=PolicyLearner)
 
     def observe(self, events: List[AgentEvent]) -> None:
         if self.concept_modalities is None:
@@ -92,6 +94,9 @@ class SimpleLearner(BaseLearner):
         stats.tried += 1
         if success:
             stats.succeeded += 1
+        if name == "curiosity":
+            reward = 1.0 if success else -0.5
+            self.policy_learner.record_outcome("curiosity.min_concept_count", reward, success)
 
     def update_models(
         self,
@@ -109,6 +114,12 @@ class SimpleLearner(BaseLearner):
 
         # 为了避免“未使用参数”告警，这里简单访问一次参数。
         _ = (world_model, self_model, drive_system, tools)
+        policy = getattr(drive_system, "policy_config", None)
+        if policy is None:
+            return
+        updates = self.policy_learner.propose_updates(policy)
+        if updates:
+            self.policy_learner.apply_updates(policy, updates)
 
     def get_tool_recommendations(self) -> List[tuple[str, ToolUsageStats]]:
         """

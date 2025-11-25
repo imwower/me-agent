@@ -14,9 +14,19 @@ from me_core.research.comparison_builder import ComparisonBuilder
 from me_core.research.paper_builder import PaperDraftBuilder
 from me_core.teachers.manager import TeacherManager
 from me_core.teachers.interface import DummyTeacher
+from me_core.agent import SimpleAgent
+from me_core.dialogue import RuleBasedDialoguePolicy
+from me_core.drives import SimpleDriveSystem
+from me_core.event_stream import EventStream
+from me_core.learning import SimpleLearner
+from me_core.perception import MultiModalPerception
+from me_core.tools import EchoTool, TimeTool
+from me_core.types import MultiModalInput
 import argparse
 import time
 import sys
+import subprocess
+import tempfile
 
 
 class StatusHandler(BaseHTTPRequestHandler):
@@ -26,6 +36,7 @@ class StatusHandler(BaseHTTPRequestHandler):
     notebook_builder: NotebookBuilder | None = None
     comparison_builder: ComparisonBuilder | None = None
     paper_builder: PaperDraftBuilder | None = None
+    agent: SimpleAgent | None = None
 
     def _send(self, code: int, data: Dict[str, Any]) -> None:
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
@@ -34,6 +45,24 @@ class StatusHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _ensure_agent(self) -> SimpleAgent:
+        if self.agent is not None:
+            return self.agent
+        world = self.world_model or SimpleWorldModel()
+        self_model = self.self_model or SimpleSelfModel()
+        agent = SimpleAgent(
+            perception=MultiModalPerception(),
+            world_model=world,
+            self_model=self_model,
+            drive_system=SimpleDriveSystem(),
+            tools={"echo": EchoTool(), "time": TimeTool()},
+            learner=SimpleLearner(),
+            dialogue_policy=RuleBasedDialoguePolicy(),
+            event_stream=EventStream(),
+        )
+        self.agent = agent
+        return agent
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path in {"/", "/dashboard"}:
@@ -145,6 +174,86 @@ class StatusHandler(BaseHTTPRequestHandler):
         except Exception:
             self._send(500, {"error": "failed to read plot"})
 
+    def do_POST(self) -> None:  # noqa: N802
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        raw = self.rfile.read(length) if length > 0 else b"{}"
+        try:
+            data = json.loads(raw.decode("utf-8") or "{}")
+        except Exception:
+            self._send(400, {"error": "invalid json"})
+            return
+
+        if self.path == "/task/run":
+            self._handle_task_run(data)
+            return
+        if self.path == "/train/run":
+            self._handle_train_run(data)
+            return
+        self._send(404, {"error": "not found"})
+
+    def _handle_task_run(self, data: Dict[str, Any]) -> None:
+        agent = self._ensure_agent()
+        inp = data.get("input") or {}
+        text = inp.get("text") if isinstance(inp, dict) else ""
+        image_path = inp.get("image_path") if isinstance(inp, dict) else None
+        audio_path = inp.get("audio_path") if isinstance(inp, dict) else None
+        video_path = inp.get("video_path") if isinstance(inp, dict) else None
+        structured = inp.get("structured") if isinstance(inp, dict) else None
+        mm = MultiModalInput(
+            text=text,
+            image_meta={"path": image_path} if image_path else None,
+            audio_meta={"path": audio_path} if audio_path else None,
+            video_meta={"path": video_path} if video_path else None,
+            structured_data=structured if isinstance(structured, dict) else None,
+        )
+        reply = agent.step(mm, image_path=None)
+        brain_snapshot = getattr(agent.world_model, "last_brain_snapshot", None)
+        self._send(
+            200,
+            {
+                "reply": reply or "",
+                "world": agent.world_model.summarize(),
+                "brain_snapshot": brain_snapshot.to_dict() if hasattr(brain_snapshot, "to_dict") else None,
+            },
+        )
+
+    def _handle_train_run(self, data: Dict[str, Any]) -> None:
+        mode = data.get("mode") or "snn"
+        if mode == "snn":
+            script = Path(__file__).resolve().parents[2] / "self-snn" / "scripts" / "train_from_schedule.py"
+            if not script.exists():
+                self._send(500, {"error": "train script not found"})
+                return
+            schedule = {
+                "id": "http-train",
+                "repo_id": "self-snn",
+                "config_path": "configs/s0_minimal.yaml",
+                "output_dir": "runs/http_train",
+                "max_epochs": 1,
+                "tasks": [
+                    {"id": "http_task", "payload": {"question": "ping"}, "expected_behavior": "", "labels": {}}
+                ],
+            }
+            with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
+                json.dump(schedule, f, ensure_ascii=False)
+                schedule_path = f.name
+            cmd = [sys.executable, str(script), "--train-schedule", schedule_path, "--dry-run"]
+            try:
+                proc = subprocess.run(
+                    cmd, check=True, capture_output=True, text=True, timeout=30, cwd=str(script.parent.parent)
+                )
+                output = proc.stdout.strip()
+                self._send(200, {"status": "submitted", "output": output})
+            except Exception as exc:
+                self._send(500, {"error": str(exc)})
+            finally:
+                try:
+                    Path(schedule_path).unlink()
+                except Exception:
+                    pass
+        else:
+            self._send(200, {"status": "noop", "mode": mode})
+
 
 def serve_http(world: SimpleWorldModel, self_model: SimpleSelfModel, log_root: str = "logs", port: int = 8000) -> Thread:
     StatusHandler.world_model = world
@@ -154,6 +263,7 @@ def serve_http(world: SimpleWorldModel, self_model: SimpleSelfModel, log_root: s
     comp = ComparisonBuilder(StatusHandler.log_index)
     StatusHandler.comparison_builder = comp
     StatusHandler.paper_builder = PaperDraftBuilder(StatusHandler.notebook_builder, comp, TeacherManager([DummyTeacher()]))
+    StatusHandler.agent = None
     server = HTTPServer(("0.0.0.0", port), StatusHandler)
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()

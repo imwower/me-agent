@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import List
 
 from .types import Scenario, TaskStep
+from .real_tasks import build_real_task_scenarios
 
 
 def benchmark_multimodal_small() -> Scenario:
@@ -26,4 +27,6 @@ def benchmark_multimodal_small() -> Scenario:
 
 
 def list_benchmark_scenarios() -> List[Scenario]:
-    return [benchmark_multimodal_small()]
+    scenarios = [benchmark_multimodal_small()]
+    scenarios.extend(build_real_task_scenarios())
+    return scenarios
