@@ -80,8 +80,10 @@ def _run_simple_benchmark(agent: SimpleAgent) -> Dict[str, Any]:
     return {"score": 1.0 if reply else 0.2, "reply": reply or ""}
 
 
-def _call_self_snn(schedule_path: Path, train_script: Path) -> Dict[str, Any]:
-    cmd = [sys.executable, str(train_script), "--train-schedule", str(schedule_path), "--dry-run"]
+def _call_self_snn(schedule_path: Path, train_script: Path, dry_run: bool = True) -> Dict[str, Any]:
+    cmd = [sys.executable, str(train_script), "--train-schedule", str(schedule_path)]
+    if dry_run:
+        cmd.append("--dry-run")
     try:
         completed = subprocess.run(cmd, check=True, capture_output=True, text=True)
         output = (completed.stdout or "").strip()
@@ -98,6 +100,7 @@ def run_small_full_loop(
     snn_train_script: Path,
     use_brain: bool,
     use_llm_dialogue: bool,
+    snn_dry_run: bool = True,
 ) -> Dict[str, Any]:
     cfg = load_agent_config(agent_config_path)
     cfg.use_llm_dialogue = cfg.use_llm_dialogue or use_llm_dialogue
@@ -131,7 +134,7 @@ def run_small_full_loop(
     schedule_path = snn_output / "train_schedule.json"
     dump_train_schedule(schedule, str(schedule_path))
 
-    snn_result = _call_self_snn(schedule_path, snn_train_script)
+    snn_result = _call_self_snn(schedule_path, snn_train_script, dry_run=snn_dry_run)
 
     if tasks:
         agent.learner.policy_learner.record_outcome("curiosity.min_concept_count", reward=0.2, success=True)
@@ -168,7 +171,16 @@ def main() -> None:
     )
     parser.add_argument("--use-brain", action="store_true")
     parser.add_argument("--use-llm-dialogue", action="store_true")
+    parser.add_argument(
+        "--dry-run-snn",
+        type=str,
+        default="true",
+        help="是否以 dry-run 方式调用 self-snn 训练（true/false）",
+    )
     args = parser.parse_args()
+
+    def _to_bool(val: str) -> bool:
+        return str(val).lower() in {"1", "true", "yes", "y"}
 
     run_small_full_loop(
         workspace=args.workspace,
@@ -178,6 +190,7 @@ def main() -> None:
         snn_train_script=Path(args.snn_train_script),
         use_brain=args.use_brain,
         use_llm_dialogue=args.use_llm_dialogue,
+        snn_dry_run=_to_bool(args.dry_run_snn),
     )
 
 
