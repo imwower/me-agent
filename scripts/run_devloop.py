@@ -449,6 +449,7 @@ def main() -> None:
     parser.add_argument("--experiment-scenarios", type=str, default="", help="实验场景 id（逗号），为空则不跑实验")
     parser.add_argument("--brain-mode", action="store_true", help="启用脑结构自改模式")
     parser.add_argument("--output", type=str, default="outputs/devloop_report.jsonl", help="输出 JSONL 路径")
+    parser.add_argument("--focus", type=str, default="all", help="可选：multimodal 时仅跑多模态相关场景")
     args = parser.parse_args()
 
     workspace = _build_workspace(args.workspace)
@@ -460,6 +461,8 @@ def main() -> None:
     teacher_cfg = _load_json(args.teacher_config)
     codellm_cfg = _load_json(args.codellm_config)
     scenario_ids = [s for s in args.scenarios.split(",") if s]
+    if args.focus == "multimodal" and args.scenarios == "self_intro":
+        scenario_ids = ["vqa_small"]
     output_path = Path(args.output)
     exp_ids = [s for s in args.experiment_scenarios.split(",") if s]
 

@@ -267,6 +267,13 @@ python scripts/demo_cli_agent.py
 - HTTP API：新增 `/task/run` 和 `/train/run`，Dashboard 增加按钮，可外部触发任务或 self-snn 训练（默认 dry-run）。
 - self-snn 对接：`scripts/train_from_schedule.py` 支持从 TrainSchedule 转换数据集并运行小训练，`self_snn/data/task_adapter.py` 提供 GeneratedTask→spike 占位转换。
 
+## R17: Multimodal Understanding Backend（轻量训练版）
+
+- 数据：`data/benchmarks/multimodal_zh_small.jsonl` 内部小基准；`data/real_tasks/tasks.jsonl` / `data/generated_tasks/*` 可作为补充；可选外部小子集（如 MUGE/COCO-CN 抽样）。
+- 训练：`me_ext/multimodal_backend` 提供 datasets/model/trainer，`scripts/train_multimodal_backend.py` 以对比学习（stub 特征）训练投影头，可在 M2 Max 上小规模运行。
+- 集成：`RealEmbeddingBackend` 可加载训练好的投影权重（weights_path），Orchestrator 增 `--mode train_multimodal` 跑一轮多模态训练。
+- 研究层：NotebookBuilder/ComparisonBuilder 支持 focus=multimodal，PaperDraftBuilder 可生成多模态相关摘要。
+
 ## 快速启动（接 self-snn 示例）
 
 1) 配置 workspace：`configs/workspace.example.json` 已填好 self-snn 路径 `/Users/george/code/github/self-snn`，允许访问 configs/scripts/self_snn/tests/runs，默认训练/评估/brain 脚本都指向 self-snn。

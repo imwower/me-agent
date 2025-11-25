@@ -10,8 +10,11 @@ class ComparisonBuilder:
     def __init__(self, log_index: LogIndex) -> None:
         self.log_index = log_index
 
-    def build_config_points(self, scenario_filter: Optional[str] = None, top_k: int = 20) -> List[ConfigPoint]:
-        raws = self.log_index.query(kinds=["experiment", "benchmark"], max_results=top_k)
+    def build_config_points(self, scenario_filter: Optional[str] = None, top_k: int = 20, focus: Optional[str] = None) -> List[ConfigPoint]:
+        kinds = ["experiment", "benchmark"]
+        if focus == "multimodal":
+            kinds.append("multimodal")
+        raws = self.log_index.query(kinds=kinds, max_results=top_k)
         points: List[ConfigPoint] = []
         for r in raws:
             if scenario_filter and r.get("scenario_id") != scenario_filter:

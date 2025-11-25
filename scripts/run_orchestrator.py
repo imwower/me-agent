@@ -24,6 +24,7 @@ from me_core.self_model import SimpleSelfModel
 from me_core.world_model import SimpleWorldModel
 from me_core.tasks import ScenarioRegistry, list_benchmark_scenarios, run_scenario
 from me_core.workspace import Workspace, RepoSpec, scan_local_repo_for_tools
+from scripts.train_multimodal_backend import run_training as run_multimodal_training  # type: ignore
 
 
 def _build_workspace(path: str | None) -> Workspace:
@@ -88,11 +89,19 @@ def auto_discover(root: str, output: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="总控 orchestrator")
     parser.add_argument("--workspace", type=str, default=None)
-    parser.add_argument("--mode", type=str, default="benchmark", choices=["benchmark", "devloop", "population"])
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="benchmark",
+        choices=["benchmark", "devloop", "population", "train_multimodal"],
+    )
     parser.add_argument("--use-brain", action="store_true")
     parser.add_argument("--use-multi-agent", action="store_true")
     parser.add_argument("--auto-discover-repos", type=str, default=None)
     parser.add_argument("--scenarios", type=str, default="self_intro")
+    parser.add_argument("--internal-multimodal", type=str, default="data/benchmarks/multimodal_zh_small.jsonl")
+    parser.add_argument("--external-multimodal", type=str, default="")
+    parser.add_argument("--multimodal-output", type=str, default="checkpoints/multimodal_backend/orchestrator")
     args = parser.parse_args()
 
     if args.auto_discover_repos:
@@ -118,6 +127,20 @@ def main() -> None:
                     res = run_scenario(agent, sc)
                     logs.append({"scenario_id": sid, "score": res.score, "success": res.success})
             report["devloop"] = logs
+    elif args.mode == "train_multimodal":
+        internal = [p for p in args.internal_multimodal.split(",") if p]
+        external = [p for p in args.external_multimodal.split(",") if p]
+        run_multimodal_training(
+            internal_data=internal,
+            external_data=external,
+            model_name="stub-multimodal",
+            output_dir=args.multimodal_output,
+            freeze_backbone=True,
+            batch_size=4,
+            max_steps=200,
+            device="cpu",
+        )
+        report["multimodal"] = {"status": "done", "output": args.multimodal_output}
     else:
         report["population"] = {"status": "not_implemented"}
 

@@ -54,11 +54,14 @@ class RealEmbeddingBackend(EmbeddingBackend):
         self.max_batch_size = int(self.model_config.get("max_batch_size", 8))
         self.model_name = self.model_config.get("model_name_or_path", "openai/clip-vit-base-patch32")
         self.use_stub = bool(self.model_config.get("use_stub", False))
+        self.weights_path = self.model_config.get("weights_path")
         self.text_model = None
         self.image_model = None
         self.audio_model = None
         self.processor = None
+        self._proj_state: dict | None = None
         self._init_model()
+        self._maybe_load_projection()
 
     def _init_model(self) -> None:
         if self.use_stub:
@@ -79,26 +82,53 @@ class RealEmbeddingBackend(EmbeddingBackend):
             self.model = None
             self.processor = None
 
+    def _maybe_load_projection(self) -> None:
+        if not self.weights_path or torch is None:
+            return
+        try:
+            state = torch.load(self.weights_path, map_location=self.device)
+            self._proj_state = state
+            # 若 state 中包含维度信息则同步
+            if isinstance(state, dict) and "proj_dim" in state:
+                self.dim = int(state.get("proj_dim", self.dim))
+            logger.info("加载自定义投影权重: %s", self.weights_path)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("加载投影权重失败: %s", exc)
+            self._proj_state = None
+
     def embed_text(self, texts: List[str]) -> List[List[float]]:
         if not texts:
             return []
+        base_vecs = []
         if getattr(self, "model", None) is None or self.processor is None or torch is None or self.use_stub:
-            return [_hash_vec(t or "", self.dim) for t in texts]
-        vectors: List[List[float]] = []
-        self.model.eval()
-        for i in range(0, len(texts), self.max_batch_size):
-            batch = texts[i : i + self.max_batch_size]
-            inputs = self.processor(text=batch, return_tensors="pt", padding=True, truncation=True)
+            base_vecs = [_hash_vec(t or "", self.dim) for t in texts]
+        else:
+            vectors: List[List[float]] = []
+            self.model.eval()
+            for i in range(0, len(texts), self.max_batch_size):
+                batch = texts[i : i + self.max_batch_size]
+                inputs = self.processor(text=batch, return_tensors="pt", padding=True, truncation=True)
+                try:
+                    inputs = {k: v.to(self.device) for k, v in inputs.items()}
+                    with torch.no_grad():
+                        feats = self.model.get_text_features(**inputs)
+                    feats = torch.nn.functional.normalize(feats, dim=-1)
+                    vectors.extend(feats.detach().cpu().tolist())
+                except Exception as exc:  # pragma: no cover - 依赖外部模型
+                    logger.warning("文本编码失败，回退 hash: %s", exc)
+                    vectors.extend(_hash_vec(t or "", self.dim) for t in batch)
+            base_vecs = vectors
+        if self._proj_state and torch is not None and base_vecs:
             try:
-                inputs = {k: v.to(self.device) for k, v in inputs.items()}
+                proj = torch.nn.Linear(len(base_vecs[0]), self.dim, bias=False)
+                proj.load_state_dict(self._proj_state["text_proj"])  # type: ignore[index]
                 with torch.no_grad():
-                    feats = self.model.get_text_features(**inputs)
-                feats = torch.nn.functional.normalize(feats, dim=-1)
-                vectors.extend(feats.detach().cpu().tolist())
-            except Exception as exc:  # pragma: no cover - 依赖外部模型
-                logger.warning("文本编码失败，回退 hash: %s", exc)
-                vectors.extend(_hash_vec(t or "", self.dim) for t in batch)
-        return vectors
+                    tensor = torch.tensor(base_vecs, dtype=torch.float32)
+                    out = torch.nn.functional.normalize(proj(tensor), dim=-1)
+                return out.tolist()
+            except Exception:
+                pass
+        return base_vecs
 
     def _embed_image_pil(self, img: "Image.Image") -> List[float]:  # type: ignore[valid-type]
         # 将图像缩放到 8x8，作为直方图特征
@@ -115,44 +145,56 @@ class RealEmbeddingBackend(EmbeddingBackend):
     def embed_image(self, image_refs: List[ImageRef]) -> List[List[float]]:
         if not image_refs:
             return []
+        base_vecs: List[List[float]] = []
         if getattr(self, "model", None) is None or self.processor is None or torch is None or self.use_stub:
-            return [_hash_vec(ref.path, self.dim) for ref in image_refs]
-        if Image is None:
-            logger.warning("PIL 不可用，图片编码回退 hash。")
-            return [_hash_vec(ref.path, self.dim) for ref in image_refs]
-        vectors: List[List[float]] = []
-        imgs: List["Image.Image"] = []  # type: ignore[valid-type]
-        for ref in image_refs:
+            base_vecs = [_hash_vec(ref.path, self.dim) for ref in image_refs]
+        else:
+            if Image is None:
+                logger.warning("PIL 不可用，图片编码回退 hash。")
+                return [_hash_vec(ref.path, self.dim) for ref in image_refs]
+            vectors: List[List[float]] = []
+            imgs: List["Image.Image"] = []  # type: ignore[valid-type]
+            for ref in image_refs:
+                try:
+                    with open(ref.path, "rb") as f:
+                        data = f.read()
+                    img = Image.open(io.BytesIO(data)).convert("RGB")
+                    imgs.append(img)
+                except Exception:
+                    imgs.append(None)  # type: ignore[arg-type]
+            for i in range(0, len(imgs), self.max_batch_size):
+                batch_imgs = imgs[i : i + self.max_batch_size]
+                valid_imgs = [im for im in batch_imgs if im is not None]
+                if not valid_imgs:
+                    vectors.extend(_hash_vec(image_refs[j].path, self.dim) for j in range(i, i + len(batch_imgs)))
+                    continue
+                inputs = self.processor(images=valid_imgs, return_tensors="pt")
+                try:
+                    inputs = {k: v.to(self.device) for k, v in inputs.items()}
+                    with torch.no_grad():
+                        feats = self.model.get_image_features(**inputs)
+                    feats = torch.nn.functional.normalize(feats, dim=-1).detach().cpu().tolist()
+                except Exception as exc:  # pragma: no cover
+                    logger.warning("图片编码失败，回退 hash: %s", exc)
+                    feats = []
+                feat_iter = iter(feats)
+                for idx, img in enumerate(batch_imgs):
+                    if img is None:
+                        vectors.append(_hash_vec(image_refs[i + idx].path, self.dim))
+                    else:
+                        vectors.append(next(feat_iter, _hash_vec(image_refs[i + idx].path, self.dim)))
+            base_vecs = vectors
+        if self._proj_state and torch is not None and base_vecs:
             try:
-                with open(ref.path, "rb") as f:
-                    data = f.read()
-                img = Image.open(io.BytesIO(data)).convert("RGB")
-                imgs.append(img)
-            except Exception:
-                imgs.append(None)  # type: ignore[arg-type]
-        for i in range(0, len(imgs), self.max_batch_size):
-            batch_imgs = imgs[i : i + self.max_batch_size]
-            valid_imgs = [im for im in batch_imgs if im is not None]
-            if not valid_imgs:
-                vectors.extend(_hash_vec(image_refs[j].path, self.dim) for j in range(i, i + len(batch_imgs)))
-                continue
-            inputs = self.processor(images=valid_imgs, return_tensors="pt")
-            try:
-                inputs = {k: v.to(self.device) for k, v in inputs.items()}
+                proj = torch.nn.Linear(len(base_vecs[0]), self.dim, bias=False)
+                proj.load_state_dict(self._proj_state["vision_proj"])  # type: ignore[index]
                 with torch.no_grad():
-                    feats = self.model.get_image_features(**inputs)
-                feats = torch.nn.functional.normalize(feats, dim=-1).detach().cpu().tolist()
-            except Exception as exc:  # pragma: no cover
-                logger.warning("图片编码失败，回退 hash: %s", exc)
-                feats = []
-            # 将编码结果与原顺序对齐，不足部分填 hash
-            feat_iter = iter(feats)
-            for idx, img in enumerate(batch_imgs):
-                if img is None:
-                    vectors.append(_hash_vec(image_refs[i + idx].path, self.dim))
-                else:
-                    vectors.append(next(feat_iter, _hash_vec(image_refs[i + idx].path, self.dim)))
-        return vectors
+                    tensor = torch.tensor(base_vecs, dtype=torch.float32)
+                    out = torch.nn.functional.normalize(proj(tensor), dim=-1)
+                return out.tolist()
+            except Exception:
+                pass
+        return base_vecs
 
     def embed_audio(self, audio_refs: List[AudioRef]) -> List[List[float]]:
         # 预留音频处理接口，当前复用 hash 占位

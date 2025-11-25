@@ -1,0 +1,2 @@
+{"id": "mm1", "image_path": "tests/data/dummy.png", "text": "一张测试图片，用于多模态对齐示例。", "labels": ["图片", "示例"], "task": "retrieval"}
+{"id": "mm2", "image_path": "tests/data/dummy.png", "text": "请描述这张图片内容。", "labels": ["图片"], "task": "caption"}

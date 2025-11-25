@@ -16,9 +16,9 @@ class PaperDraftBuilder:
         self.comparison_builder = comparison_builder
         self.teacher_manager = teacher_manager or TeacherManager([DummyTeacher()])
 
-    def build_draft_outline(self) -> PaperDraft:
-        notebook = self.notebook_builder.build_notebook(kind_filters=None, max_entries=5)
-        points = self.comparison_builder.build_config_points(top_k=5)
+    def build_draft_outline(self, focus: str | None = None) -> PaperDraft:
+        notebook = self.notebook_builder.build_notebook(kind_filters=None, max_entries=5, focus=focus)
+        points = self.comparison_builder.build_config_points(top_k=5, focus=focus)
         summary_text = self.comparison_builder.generate_text_summary(points)
         abstract = (
             f"我们在多模态、代码修复与脑启发任务上进行了 {len(notebook.entries)} 次实验，"

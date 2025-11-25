@@ -42,11 +42,15 @@ class NotebookBuilder:
         kind_filters: Optional[List[str]] = None,
         time_window: Optional[Tuple[float, float]] = None,
         max_entries: int = 100,
+        focus: Optional[str] = None,
     ) -> ExperimentNotebook:
         since, until = (None, None)
         if time_window:
             since, until = time_window
-        raw = self.log_index.query(kinds=kind_filters, since=since, until=until, max_results=max_entries)
+        filters = kind_filters
+        if focus == "multimodal":
+            filters = ["benchmark", "multimodal"]
+        raw = self.log_index.query(kinds=filters, since=since, until=until, max_results=max_entries)
         entries = [_to_entry(r) for r in raw]
         title = "实验 Notebook"
         meta: Dict[str, Any] = {}
@@ -58,4 +62,7 @@ class NotebookBuilder:
             {"id": "brain_graph", "title": "Brain Graph"},
             {"id": "experiment_curve", "title": "Experiment Curve"},
         ]
+        if focus == "multimodal":
+            meta["focus"] = "multimodal"
+            meta["suggested_plots"].append({"id": "multimodal_recall", "title": "Multimodal Recall"})
         return ExperimentNotebook(id=str(uuid.uuid4()), title=title, entries=entries, meta=meta)

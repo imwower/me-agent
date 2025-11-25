@@ -214,6 +214,13 @@
 - HTTP API：`/task/run` 接受多模态输入并调用默认 SimpleAgent；`/train/run` 可触发 self-snn schedule dry-run，Dashboard 增按钮展示结果（仍属演示级）。
 - self-snn 适配：`self_snn/data/task_adapter.py` 将 GeneratedTask 转成占位 spike 数据，`train_from_schedule.py` 支持 real run（可配置 max_epochs/duration）。
 
+## R17: 多模态理解子系统（轻量版）
+
+- 数据：`data/benchmarks/multimodal_zh_small.jsonl` 小样本基准；可选外部抽样（MUGE/COCO-CN 等）统一为 jsonl；real_tasks/generated_tasks 可作为补充训练样本。
+- 模型/训练：`me_ext/multimodal_backend` 数据加载 + stub backbone + 投影头；`train_multimodal_backend.py` 以 CLIP-style 对比损失训练，控制 steps/batch 适配 M2 Max。
+- 集成：RealEmbeddingBackend 支持 weights_path 载入投影；Orchestrator 增 `--mode train_multimodal`，DevLoop `--focus multimodal` 可仅跑多模态场景。
+- 研究：Notebook/Comparison/PaperDraft 支持 focus=multimodal，方便生成多模态专向报告。
+
 ## R6: Experiment Orchestrator
 
 - Workspace RepoSpec 支持 tags/meta，标记 experiment_target 仓库并附带默认 train/eval 命令。  
