@@ -22,7 +22,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="运行联合进化流程（demo）")
     parser.add_argument("--workspace", type=str, default=None)
     parser.add_argument("--tasks-root", type=str, default="data/generated_tasks")
-    parser.add_argument("--gens", type=int, default=2)
+    parser.add_argument(
+        "--gens",
+        type=int,
+        default=2,
+        help="联合进化的代数（别名 --generations）",
+    )
+    parser.add_argument(
+        "--generations",
+        type=int,
+        dest="gens",
+        help="同 --gens，兼容旧 CLI 调用",
+    )
     parser.add_argument("--output", type=str, default="logs/coevo.jsonl")
     args = parser.parse_args()
 
