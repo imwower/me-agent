@@ -3,19 +3,24 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from typing import List
 
 import torch
 from torch.utils.data import DataLoader
 
-from me_ext.multimodal_backend.datasets import (
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from me_ext.multimodal_backend.datasets import (  # noqa: E402
     build_train_eval_splits,
     MultimodalDataset,
     collate_batch,
 )
-from me_ext.multimodal_backend.models import MultimodalBackbone
-from me_ext.multimodal_backend.trainer import MultimodalTrainer
+from me_ext.multimodal_backend.models import MultimodalBackbone  # noqa: E402
+from me_ext.multimodal_backend.trainer import MultimodalTrainer  # noqa: E402
 
 
 def run_training(
