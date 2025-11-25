@@ -123,22 +123,18 @@ def translate_label(name: str) -> str:
     return CIFAR100_ZH.get(name, name)
 
 
-def load_cifar100(root: str, train: bool = True, limit_per_class: int = 10) -> List[Tuple[str, int]]:
+def load_cifar100(root: str, train: bool = True, limit_per_class: int = 10) -> List[Tuple[Any, int]]:
     transform = transforms.Compose([])
     dataset = CIFAR100(root=root, train=train, download=False, transform=transform)
     indices_by_class: dict[int, List[int]] = {}
     for idx, (_, label) in enumerate(dataset):
         indices_by_class.setdefault(label, []).append(idx)
-    selected: List[Tuple[str, int]] = []
+    selected: List[Tuple[Any, int]] = []
     for label, idxs in indices_by_class.items():
         random.shuffle(idxs)
         for i in idxs[:limit_per_class]:
-            subdir = Path(root) / ("train" if train else "test")
-            subdir.mkdir(parents=True, exist_ok=True)
-            img_path = subdir / f"{label}_{i}.png"
             img, _ = dataset[i]
-            img.save(img_path)
-            selected.append((str(img_path), label))
+            selected.append((img, label))
     return selected
 
 
@@ -149,14 +145,16 @@ def convert(root: str, output: str, limit_per_class: int = 10, sample: int = 10)
     class_names = CIFAR100(root=root, train=True, download=False).classes
     out_path = Path(output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    img_dir = Path(root) / "train"
+    img_dir.mkdir(parents=True, exist_ok=True)
+
     with out_path.open("w", encoding="utf-8") as f:
-        for idx, (img_path, label_idx) in enumerate(samples):
+        for idx, (img, label_idx) in enumerate(samples):
             name = class_names[label_idx]
             zh = translate_label(name)
-            filename = Path(img_path).name.replace(".png", f"_{zh}.png")
-            # 重命名文件，添加中文方便查看
-            target_path = Path(img_path).with_name(filename)
-            Path(img_path).rename(target_path)
+            filename = f"{label_idx}_{idx}_{zh}.png"
+            target_path = img_dir / filename
+            img.save(target_path)
             rec = {
                 "id": f"cifar-{idx}",
                 "image_path": str(target_path),
