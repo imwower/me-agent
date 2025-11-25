@@ -30,6 +30,7 @@ def main() -> None:
     parser.add_argument("--jobs", type=str, required=True, help="jobs JSON 路径")
     parser.add_argument("--workspace", type=str, default=None)
     parser.add_argument("--once", action="store_true", help="仅跑一轮")
+    parser.add_argument("--verbose", action="store_true", help="打印调度过程便于观察")
     args = parser.parse_args()
 
     workspace = Workspace.from_json(args.workspace) if args.workspace else Workspace([])
@@ -41,13 +42,19 @@ def main() -> None:
         now_ts = time.time()
         for job in jobs:
             if should_run(job.schedule, last_run.get(job.id), now_ts):
+                if args.verbose:
+                    print(f"[scheduler] run job={job.id} schedule={job.schedule} at {now_ts}")
                 res = runner.run_job(job)
+                if args.verbose:
+                    print(f"[scheduler] result job={job.id} -> {res}")
                 log_path = Path("logs/jobs")
                 log_path.mkdir(parents=True, exist_ok=True)
                 out = log_path / f"{job.id}.jsonl"
                 with out.open("a", encoding="utf-8") as f:
                     f.write(json.dumps(res, ensure_ascii=False) + "\n")
                 last_run[job.id] = now_ts
+            elif args.verbose:
+                print(f"[scheduler] skip job={job.id} schedule={job.schedule}")
         if args.once:
             break
         time.sleep(5)
