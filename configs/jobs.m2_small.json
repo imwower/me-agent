@@ -1,0 +1,26 @@
+[
+  {
+    "id": "demo-devloop",
+    "name": "每日一次 DevLoop Demo",
+    "kind": "devloop",
+    "config": {
+      "workspace": "configs/workspace.example.json",
+      "mode": "devloop",
+      "use_brain": true,
+      "use_multi_agent": false
+    },
+    "schedule": "daily",
+    "enabled": true
+  },
+  {
+    "id": "demo-benchmark",
+    "name": "每周一次 Benchmark Demo",
+    "kind": "benchmark",
+    "config": {
+      "workspace": "configs/workspace.example.json",
+      "mode": "benchmark"
+    },
+    "schedule": "weekly",
+    "enabled": false
+  }
+]

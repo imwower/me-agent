@@ -39,8 +39,12 @@ def should_run(schedule: str, last_run: float | None, now_ts: float) -> bool:
 
 def load_jobs(path: Path) -> list[Job]:
     data = json.loads(path.read_text(encoding="utf-8"))
+    # 兼容两种格式：{"jobs": [...]} 或直接列表 [...]
+    items = data.get("jobs") if isinstance(data, dict) else data
+    if items is None:
+        return []
     jobs: list[Job] = []
-    for item in data.get("jobs", []):
+    for item in items:
         jobs.append(
             Job(
                 id=item["id"],
